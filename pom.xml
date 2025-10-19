@@ -14,8 +14,8 @@
     <description>基于MapDB的时序数据存储系统</description>
 
     <properties>
-        <maven.compiler.source>11</maven.compiler.source>
-        <maven.compiler.target>11</maven.compiler.target>
+        <maven.compiler.source>8</maven.compiler.source>
+        <maven.compiler.target>8</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <mapdb.version>3.1.0</mapdb.version>
         <junit.version>5.9.2</junit.version>

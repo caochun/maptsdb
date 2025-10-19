@@ -106,7 +106,7 @@ public class ObjectTimeSeriesDb {
             return; // 数据源已存在
         }
         
-        var sourceData = db.treeMap(sourceId)
+        ConcurrentNavigableMap<Long, Object> sourceData = db.treeMap(sourceId)
                 .keySerializer(Serializer.LONG)
                 .valueSerializer(Serializer.JAVA)
                 .createOrOpen();
@@ -501,7 +501,7 @@ public class ObjectTimeSeriesDb {
     private void loadExistingDataSources() {
         // 尝试加载"default"数据源（向后兼容）
         try {
-            var defaultSource = db.treeMap("default")
+            ConcurrentNavigableMap<Long, Object> defaultSource = db.treeMap("default")
                     .keySerializer(Serializer.LONG)
                     .valueSerializer(Serializer.JAVA)
                     .createOrOpen();
