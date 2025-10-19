@@ -6,9 +6,12 @@ import org.mapdb.Serializer;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
+import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -39,8 +42,8 @@ public class TimeSeriesDB {
     /** MapDB数据库实例 */
     private final DB db;
     
-    /** 时序数据存储映射 */
-    private final ConcurrentNavigableMap<Long, Double> timeSeriesData;
+    /** 多数据源存储映射 */
+    private final Map<String, ConcurrentNavigableMap<Long, Double>> dataSources;
     
     /** 定时任务调度器 */
     private final ScheduledExecutorService scheduler;
@@ -73,12 +76,11 @@ public class TimeSeriesDB {
                 .concurrencyScale(16)      // 设置并发级别，支持多线程操作
                 .make();
         
-        // 创建时序数据存储结构
-        // 使用标准序列化器（MapDB 3.1.0中增量编码和压缩序列化器的API可能不同）
-        this.timeSeriesData = db.treeMap("time_series")
-                .keySerializer(Serializer.LONG)    // 时间戳序列化
-                .valueSerializer(Serializer.DOUBLE) // 浮点数序列化
-                .createOrOpen();
+        // 初始化多数据源存储映射
+        this.dataSources = new HashMap<>();
+        
+        // 加载现有的数据源（如果数据库已存在）
+        loadExistingDataSources();
         
         // 初始化定时任务调度器
         this.scheduler = Executors.newScheduledThreadPool(2);
@@ -90,6 +92,29 @@ public class TimeSeriesDB {
     // ==================== 公共方法 ====================
     
     /**
+     * 创建数据源
+     * 
+     * @param sourceId 数据源ID
+     * @throws IllegalArgumentException 如果sourceId为null或空字符串
+     */
+    public void createDataSource(String sourceId) {
+        if (sourceId == null || sourceId.trim().isEmpty()) {
+            throw new IllegalArgumentException("数据源ID不能为空");
+        }
+        
+        if (dataSources.containsKey(sourceId)) {
+            return; // 数据源已存在
+        }
+        
+        ConcurrentNavigableMap<Long, Double> sourceData = db.treeMap(sourceId)
+                .keySerializer(Serializer.LONG_PACKED)  // 时间戳压缩序列化
+                .valueSerializer(Serializer.DOUBLE)     // 浮点数序列化
+                .createOrOpen();
+        
+        dataSources.put(sourceId, sourceData);
+    }
+    
+    /**
      * 写入单个时序数据点
      * 
      * @param timestamp 时间戳（毫秒）
@@ -97,11 +122,32 @@ public class TimeSeriesDB {
      * @throws IllegalArgumentException 如果timestamp小于0
      */
     public void put(long timestamp, double value) {
+        put("default", timestamp, value);
+    }
+    
+    /**
+     * 写入指定数据源的时序数据点
+     * 
+     * @param sourceId 数据源ID
+     * @param timestamp 时间戳（毫秒）
+     * @param value 数据值
+     * @throws IllegalArgumentException 如果参数无效
+     */
+    public void put(String sourceId, long timestamp, double value) {
+        if (sourceId == null || sourceId.trim().isEmpty()) {
+            throw new IllegalArgumentException("数据源ID不能为空");
+        }
         if (timestamp < 0) {
             throw new IllegalArgumentException("时间戳不能为负数");
         }
         
-        timeSeriesData.put(timestamp, value);
+        ConcurrentNavigableMap<Long, Double> sourceData = dataSources.get(sourceId);
+        if (sourceData == null) {
+            createDataSource(sourceId);
+            sourceData = dataSources.get(sourceId);
+        }
+        
+        sourceData.put(timestamp, value);
         db.commit(); // 立即提交事务，确保数据持久化
     }
     
@@ -114,12 +160,34 @@ public class TimeSeriesDB {
      * @throws IllegalArgumentException 如果dataPoints为null或包含无效数据
      */
     public void putBatch(List<DataPoint> dataPoints) {
+        putBatch("default", dataPoints);
+    }
+    
+    /**
+     * 批量写入指定数据源的时序数据（优化版本）
+     * 
+     * <p>使用预分配的HashMap和putAll方法，显著提高批量写入性能。</p>
+     * 
+     * @param sourceId 数据源ID
+     * @param dataPoints 数据点列表，不能为null
+     * @throws IllegalArgumentException 如果参数无效
+     */
+    public void putBatch(String sourceId, List<DataPoint> dataPoints) {
+        if (sourceId == null || sourceId.trim().isEmpty()) {
+            throw new IllegalArgumentException("数据源ID不能为空");
+        }
         if (dataPoints == null) {
             throw new IllegalArgumentException("数据点列表不能为null");
         }
         
         if (dataPoints.isEmpty()) {
             return; // 空列表直接返回
+        }
+        
+        ConcurrentNavigableMap<Long, Double> sourceData = dataSources.get(sourceId);
+        if (sourceData == null) {
+            createDataSource(sourceId);
+            sourceData = dataSources.get(sourceId);
         }
         
         // 预分配容量，避免HashMap扩容开销
@@ -134,7 +202,7 @@ public class TimeSeriesDB {
             dataMap.put(point.getTimestamp(), point.getValue());
         }
         
-        timeSeriesData.putAll(dataMap);
+        sourceData.putAll(dataMap);
         db.commit(); // 批量提交事务
     }
     
@@ -145,7 +213,22 @@ public class TimeSeriesDB {
      * @return 数据值，如果不存在返回null
      */
     public Double get(long timestamp) {
-        return timeSeriesData.get(timestamp);
+        return get("default", timestamp);
+    }
+    
+    /**
+     * 获取指定数据源和时间戳的数据
+     * 
+     * @param sourceId 数据源ID
+     * @param timestamp 时间戳
+     * @return 数据值，如果不存在返回null
+     */
+    public Double get(String sourceId, long timestamp) {
+        ConcurrentNavigableMap<Long, Double> sourceData = dataSources.get(sourceId);
+        if (sourceData == null) {
+            return null;
+        }
+        return sourceData.get(timestamp);
     }
     
     /**
@@ -157,11 +240,32 @@ public class TimeSeriesDB {
      * @throws IllegalArgumentException 如果startTime > endTime
      */
     public NavigableMap<Long, Double> queryRange(long startTime, long endTime) {
+        return queryRange("default", startTime, endTime);
+    }
+    
+    /**
+     * 查询指定数据源的时间范围内的数据
+     * 
+     * @param sourceId 数据源ID
+     * @param startTime 开始时间戳（包含）
+     * @param endTime 结束时间戳（包含）
+     * @return 时间范围内的数据映射，按时间戳排序
+     * @throws IllegalArgumentException 如果参数无效
+     */
+    public NavigableMap<Long, Double> queryRange(String sourceId, long startTime, long endTime) {
+        if (sourceId == null || sourceId.trim().isEmpty()) {
+            throw new IllegalArgumentException("数据源ID不能为空");
+        }
         if (startTime > endTime) {
             throw new IllegalArgumentException("开始时间不能大于结束时间");
         }
         
-        return timeSeriesData.subMap(startTime, true, endTime, true);
+        ConcurrentNavigableMap<Long, Double> sourceData = dataSources.get(sourceId);
+        if (sourceData == null) {
+            return new TreeMap<>();
+        }
+        
+        return sourceData.subMap(startTime, true, endTime, true);
     }
     
     /**
@@ -172,19 +276,81 @@ public class TimeSeriesDB {
      * @throws IllegalArgumentException 如果count <= 0
      */
     public List<DataPoint> getLatest(int count) {
+        return getLatest("default", count);
+    }
+    
+    /**
+     * 获取指定数据源的最新N个数据点
+     * 
+     * @param sourceId 数据源ID
+     * @param count 数据点数量，必须大于0
+     * @return 最新的数据点列表，按时间戳降序排列
+     * @throws IllegalArgumentException 如果参数无效
+     */
+    public List<DataPoint> getLatest(String sourceId, int count) {
+        if (sourceId == null || sourceId.trim().isEmpty()) {
+            throw new IllegalArgumentException("数据源ID不能为空");
+        }
         if (count <= 0) {
             throw new IllegalArgumentException("数据点数量必须大于0");
         }
         
+        ConcurrentNavigableMap<Long, Double> sourceData = dataSources.get(sourceId);
+        if (sourceData == null) {
+            return new ArrayList<>();
+        }
+        
         List<DataPoint> result = new ArrayList<>();
-        Map.Entry<Long, Double> entry = timeSeriesData.lastEntry();
+        Map.Entry<Long, Double> entry = sourceData.lastEntry();
         
         for (int i = 0; i < count && entry != null; i++) {
             result.add(new DataPoint(entry.getKey(), entry.getValue()));
-            entry = timeSeriesData.lowerEntry(entry.getKey());
+            entry = sourceData.lowerEntry(entry.getKey());
         }
         
         return result;
+    }
+    
+    /**
+     * 获取所有数据源列表
+     * 
+     * @return 数据源ID集合
+     */
+    public Set<String> getDataSources() {
+        return new HashSet<>(dataSources.keySet());
+    }
+    
+    /**
+     * 获取数据源统计信息
+     * 
+     * @return 各数据源的数据点数量映射
+     */
+    public Map<String, Long> getDataSourcesStats() {
+        Map<String, Long> stats = new HashMap<>();
+        for (Map.Entry<String, ConcurrentNavigableMap<Long, Double>> entry : dataSources.entrySet()) {
+            stats.put(entry.getKey(), (long) entry.getValue().size());
+        }
+        return stats;
+    }
+    
+    /**
+     * 删除数据源
+     * 
+     * @param sourceId 数据源ID
+     * @return 是否删除成功
+     */
+    public boolean removeDataSource(String sourceId) {
+        if (sourceId == null || sourceId.trim().isEmpty()) {
+            return false;
+        }
+        
+        ConcurrentNavigableMap<Long, Double> sourceData = dataSources.remove(sourceId);
+        if (sourceData != null) {
+            sourceData.clear();
+            db.commit();
+            return true;
+        }
+        return false;
     }
     
     /**
@@ -194,8 +360,11 @@ public class TimeSeriesDB {
      */
     public DBStats getStats() {
         long storageSize = getStorageSize();
+        long totalDataPoints = dataSources.values().stream()
+            .mapToLong(ConcurrentNavigableMap::size)
+            .sum();
         return new DBStats(
-            timeSeriesData.size(),
+            totalDataPoints,
             storageSize,
             System.currentTimeMillis()
         );
@@ -212,6 +381,28 @@ public class TimeSeriesDB {
     }
     
     // ==================== 私有方法 ====================
+    
+    /**
+     * 加载现有的数据源
+     */
+    private void loadExistingDataSources() {
+        // 尝试加载"default"数据源（向后兼容）
+        try {
+            ConcurrentNavigableMap<Long, Double> defaultSource = db.treeMap("default")
+                    .keySerializer(Serializer.LONG_PACKED)
+                    .valueSerializer(Serializer.DOUBLE)
+                    .createOrOpen();
+            if (!defaultSource.isEmpty()) {
+                dataSources.put("default", defaultSource);
+            }
+        } catch (Exception e) {
+            // 如果加载失败，忽略错误
+        }
+        
+        // 这里可以添加逻辑来发现其他数据源
+        // 由于MapDB的限制，我们无法直接枚举所有表名
+        // 所以采用按需创建的方式
+    }
     
     /**
      * 获取数据库文件存储大小
@@ -237,9 +428,18 @@ public class TimeSeriesDB {
      */
     private void cleanupOldData() {
         long thirtyDaysAgo = System.currentTimeMillis() - 30L * 24 * 3600 * 1000;
-        timeSeriesData.headMap(thirtyDaysAgo).clear();
-        db.commit();
-        System.out.println("清理了30天前的历史数据");
+        int totalCleaned = 0;
+        
+        for (ConcurrentNavigableMap<Long, Double> sourceData : dataSources.values()) {
+            int cleaned = sourceData.headMap(thirtyDaysAgo).size();
+            sourceData.headMap(thirtyDaysAgo).clear();
+            totalCleaned += cleaned;
+        }
+        
+        if (totalCleaned > 0) {
+            db.commit();
+            System.out.println("清理了" + totalCleaned + "个30天前的历史数据点");
+        }
     }
     
     // ==================== 内部类 ====================

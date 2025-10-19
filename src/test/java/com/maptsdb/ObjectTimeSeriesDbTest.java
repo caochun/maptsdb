@@ -6,6 +6,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Map;
+import java.util.Set;
 import java.io.File;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -253,14 +255,50 @@ public class ObjectTimeSeriesDbTest {
         assertThrows(IllegalArgumentException.class, () -> {
             tsdb.put(-1, 25.5); // 负数时间戳
         });
-        
+
         assertThrows(IllegalArgumentException.class, () -> {
             tsdb.put(System.currentTimeMillis(), null); // null值
         });
-        
+
         // 测试空数据点列表
         assertThrows(IllegalArgumentException.class, () -> {
             tsdb.putBatch(null);
         });
+    }
+    
+    @Test
+    @DisplayName("测试多数据源功能")
+    void testMultiDataSource() {
+        // 创建多个数据源
+        tsdb.createDataSource("sensors");
+        tsdb.createDataSource("actuators");
+        tsdb.createDataSource("alarms");
+        
+        // 验证数据源创建
+        Set<String> dataSources = tsdb.getDataSources();
+        assertTrue(dataSources.contains("sensors"));
+        assertTrue(dataSources.contains("actuators"));
+        assertTrue(dataSources.contains("alarms"));
+        
+        // 向不同数据源写入不同类型的数据
+        long baseTime = System.currentTimeMillis();
+        tsdb.putDouble("sensors", baseTime, 25.5);
+        tsdb.putString("actuators", baseTime, "ON");
+        tsdb.putBoolean("alarms", baseTime, true);
+        
+        // 验证数据写入
+        assertEquals(25.5, tsdb.getDouble("sensors", baseTime));
+        assertEquals("ON", tsdb.getString("actuators", baseTime));
+        assertEquals(Boolean.TRUE, tsdb.get("alarms", baseTime));
+        
+        // 测试数据源统计
+        Map<String, Long> stats = tsdb.getDataSourcesStats();
+        assertEquals(1L, stats.get("sensors"));
+        assertEquals(1L, stats.get("actuators"));
+        assertEquals(1L, stats.get("alarms"));
+        
+        // 测试删除数据源
+        assertTrue(tsdb.removeDataSource("alarms"));
+        assertFalse(tsdb.getDataSources().contains("alarms"));
     }
 }

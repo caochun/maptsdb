@@ -7,6 +7,8 @@ import org.junit.jupiter.api.DisplayName;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.NavigableMap;
+import java.util.Map;
+import java.util.Set;
 import java.io.File;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -197,24 +199,60 @@ public class TimeSeriesDBTest {
         assertThrows(IllegalArgumentException.class, () -> {
             tsdb.put(-1, 25.5);
         });
-        
+
         // 测试空数据点列表
         assertThrows(IllegalArgumentException.class, () -> {
             tsdb.putBatch(null);
         });
-        
+
         // 测试时间范围查询参数
         assertThrows(IllegalArgumentException.class, () -> {
             tsdb.queryRange(1000, 500); // startTime > endTime
         });
-        
+
         // 测试getLatest参数
         assertThrows(IllegalArgumentException.class, () -> {
             tsdb.getLatest(0); // count <= 0
         });
-        
+
         assertThrows(IllegalArgumentException.class, () -> {
             tsdb.getLatest(-1); // count < 0
         });
+    }
+    
+    @Test
+    @DisplayName("测试多数据源功能")
+    void testMultiDataSource() {
+        // 创建多个数据源
+        tsdb.createDataSource("temperature");
+        tsdb.createDataSource("humidity");
+        tsdb.createDataSource("pressure");
+        
+        // 验证数据源创建
+        Set<String> dataSources = tsdb.getDataSources();
+        assertTrue(dataSources.contains("temperature"));
+        assertTrue(dataSources.contains("humidity"));
+        assertTrue(dataSources.contains("pressure"));
+        
+        // 向不同数据源写入数据
+        long baseTime = System.currentTimeMillis();
+        tsdb.put("temperature", baseTime, 25.5);
+        tsdb.put("humidity", baseTime, 65.0);
+        tsdb.put("pressure", baseTime, 1013.25);
+        
+        // 验证数据写入
+        assertEquals(25.5, tsdb.get("temperature", baseTime));
+        assertEquals(65.0, tsdb.get("humidity", baseTime));
+        assertEquals(1013.25, tsdb.get("pressure", baseTime));
+        
+        // 测试数据源统计
+        Map<String, Long> stats = tsdb.getDataSourcesStats();
+        assertEquals(1L, stats.get("temperature"));
+        assertEquals(1L, stats.get("humidity"));
+        assertEquals(1L, stats.get("pressure"));
+        
+        // 测试删除数据源
+        assertTrue(tsdb.removeDataSource("pressure"));
+        assertFalse(tsdb.getDataSources().contains("pressure"));
     }
 }

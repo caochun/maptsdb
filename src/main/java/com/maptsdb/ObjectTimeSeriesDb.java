@@ -6,9 +6,12 @@ import org.mapdb.Serializer;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
+import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -39,8 +42,8 @@ public class ObjectTimeSeriesDb {
     /** MapDB数据库实例 */
     private final DB db;
     
-    /** 时序数据存储映射（支持任意对象类型） */
-    private final ConcurrentNavigableMap<Long, Object> timeSeriesData;
+    /** 多数据源存储映射（支持任意对象类型） */
+    private final Map<String, ConcurrentNavigableMap<Long, Object>> dataSources;
     
     /** 定时任务调度器 */
     private final ScheduledExecutorService scheduler;
@@ -73,12 +76,11 @@ public class ObjectTimeSeriesDb {
                 .concurrencyScale(16)      // 设置并发级别，支持多线程操作
                 .make();
         
-        // 创建时序数据存储结构 - 使用通用Object类型
-        // 使用标准序列化器（MapDB 3.1.0中增量编码序列化器的API可能不同）
-        this.timeSeriesData = db.treeMap("time_series")
-                .keySerializer(Serializer.LONG)    // 时间戳序列化
-                .valueSerializer(Serializer.JAVA) // 使用Java序列化器支持任意对象
-                .createOrOpen();
+        // 初始化多数据源存储映射
+        this.dataSources = new HashMap<>();
+        
+        // 加载现有的数据源（如果数据库已存在）
+        loadExistingDataSources();
         
         // 初始化定时任务调度器
         this.scheduler = Executors.newScheduledThreadPool(2);
@@ -87,11 +89,88 @@ public class ObjectTimeSeriesDb {
         scheduler.scheduleAtFixedRate(this::cleanupOldData, 1, 1, TimeUnit.HOURS);
     }
     
+    // ==================== 数据源管理 ====================
+    
+    /**
+     * 创建数据源
+     * 
+     * @param sourceId 数据源ID
+     * @throws IllegalArgumentException 如果sourceId为null或空字符串
+     */
+    public void createDataSource(String sourceId) {
+        if (sourceId == null || sourceId.trim().isEmpty()) {
+            throw new IllegalArgumentException("数据源ID不能为空");
+        }
+        
+        if (dataSources.containsKey(sourceId)) {
+            return; // 数据源已存在
+        }
+        
+        ConcurrentNavigableMap<Long, Object> sourceData = db.treeMap(sourceId)
+                .keySerializer(Serializer.LONG_PACKED)  // 时间戳压缩序列化
+                .valueSerializer(Serializer.JAVA)      // 使用Java序列化器支持任意对象
+                .createOrOpen();
+        
+        dataSources.put(sourceId, sourceData);
+    }
+    
+    /**
+     * 获取所有数据源列表
+     * 
+     * @return 数据源ID集合
+     */
+    public Set<String> getDataSources() {
+        return new HashSet<>(dataSources.keySet());
+    }
+    
+    /**
+     * 获取数据源统计信息
+     * 
+     * @return 各数据源的数据点数量映射
+     */
+    public Map<String, Long> getDataSourcesStats() {
+        Map<String, Long> stats = new HashMap<>();
+        for (Map.Entry<String, ConcurrentNavigableMap<Long, Object>> entry : dataSources.entrySet()) {
+            stats.put(entry.getKey(), (long) entry.getValue().size());
+        }
+        return stats;
+    }
+    
+    /**
+     * 删除数据源
+     * 
+     * @param sourceId 数据源ID
+     * @return 是否删除成功
+     */
+    public boolean removeDataSource(String sourceId) {
+        if (sourceId == null || sourceId.trim().isEmpty()) {
+            return false;
+        }
+        
+        ConcurrentNavigableMap<Long, Object> sourceData = dataSources.remove(sourceId);
+        if (sourceData != null) {
+            sourceData.clear();
+            db.commit();
+            return true;
+        }
+        return false;
+    }
+    
+    // ==================== 数据写入方法 ====================
+    
     /**
      * 写入Double类型数据
      */
     public void putDouble(long timestamp, double value) {
-        timeSeriesData.put(timestamp, value);
+        putDouble("default", timestamp, value);
+    }
+    
+    /**
+     * 写入指定数据源的Double类型数据
+     */
+    public void putDouble(String sourceId, long timestamp, double value) {
+        ConcurrentNavigableMap<Long, Object> sourceData = getOrCreateSource(sourceId);
+        sourceData.put(timestamp, value);
         db.commit();
     }
     
@@ -99,7 +178,15 @@ public class ObjectTimeSeriesDb {
      * 写入Integer类型数据
      */
     public void putInteger(long timestamp, int value) {
-        timeSeriesData.put(timestamp, value);
+        putInteger("default", timestamp, value);
+    }
+    
+    /**
+     * 写入指定数据源的Integer类型数据
+     */
+    public void putInteger(String sourceId, long timestamp, int value) {
+        ConcurrentNavigableMap<Long, Object> sourceData = getOrCreateSource(sourceId);
+        sourceData.put(timestamp, value);
         db.commit();
     }
     
@@ -107,7 +194,15 @@ public class ObjectTimeSeriesDb {
      * 写入Long类型数据
      */
     public void putLong(long timestamp, long value) {
-        timeSeriesData.put(timestamp, value);
+        putLong("default", timestamp, value);
+    }
+    
+    /**
+     * 写入指定数据源的Long类型数据
+     */
+    public void putLong(String sourceId, long timestamp, long value) {
+        ConcurrentNavigableMap<Long, Object> sourceData = getOrCreateSource(sourceId);
+        sourceData.put(timestamp, value);
         db.commit();
     }
     
@@ -115,7 +210,15 @@ public class ObjectTimeSeriesDb {
      * 写入String类型数据
      */
     public void putString(long timestamp, String value) {
-        timeSeriesData.put(timestamp, value);
+        putString("default", timestamp, value);
+    }
+    
+    /**
+     * 写入指定数据源的String类型数据
+     */
+    public void putString(String sourceId, long timestamp, String value) {
+        ConcurrentNavigableMap<Long, Object> sourceData = getOrCreateSource(sourceId);
+        sourceData.put(timestamp, value);
         db.commit();
     }
     
@@ -123,7 +226,15 @@ public class ObjectTimeSeriesDb {
      * 写入Boolean类型数据
      */
     public void putBoolean(long timestamp, boolean value) {
-        timeSeriesData.put(timestamp, value);
+        putBoolean("default", timestamp, value);
+    }
+    
+    /**
+     * 写入指定数据源的Boolean类型数据
+     */
+    public void putBoolean(String sourceId, long timestamp, boolean value) {
+        ConcurrentNavigableMap<Long, Object> sourceData = getOrCreateSource(sourceId);
+        sourceData.put(timestamp, value);
         db.commit();
     }
     
@@ -131,7 +242,15 @@ public class ObjectTimeSeriesDb {
      * 写入Float类型数据
      */
     public void putFloat(long timestamp, float value) {
-        timeSeriesData.put(timestamp, value);
+        putFloat("default", timestamp, value);
+    }
+    
+    /**
+     * 写入指定数据源的Float类型数据
+     */
+    public void putFloat(String sourceId, long timestamp, float value) {
+        ConcurrentNavigableMap<Long, Object> sourceData = getOrCreateSource(sourceId);
+        sourceData.put(timestamp, value);
         db.commit();
     }
     
@@ -143,13 +262,30 @@ public class ObjectTimeSeriesDb {
      * @throws IllegalArgumentException 如果timestamp小于0或value为null
      */
     public void put(long timestamp, Object value) {
+        put("default", timestamp, value);
+    }
+    
+    /**
+     * 写入指定数据源的通用方法
+     * 
+     * @param sourceId 数据源ID
+     * @param timestamp 时间戳（毫秒）
+     * @param value 任意类型的数据值
+     * @throws IllegalArgumentException 如果参数无效
+     */
+    public void put(String sourceId, long timestamp, Object value) {
+        if (sourceId == null || sourceId.trim().isEmpty()) {
+            throw new IllegalArgumentException("数据源ID不能为空");
+        }
         if (timestamp < 0) {
             throw new IllegalArgumentException("时间戳不能为负数");
         }
         if (value == null) {
             throw new IllegalArgumentException("数据值不能为null");
         }
-        timeSeriesData.put(timestamp, value);
+        
+        ConcurrentNavigableMap<Long, Object> sourceData = getOrCreateSource(sourceId);
+        sourceData.put(timestamp, value);
         db.commit();
     }
     
@@ -162,6 +298,22 @@ public class ObjectTimeSeriesDb {
      * @throws IllegalArgumentException 如果dataPoints为null或包含无效数据
      */
     public void putBatch(List<DataPoint> dataPoints) {
+        putBatch("default", dataPoints);
+    }
+    
+    /**
+     * 批量写入指定数据源的数据点（优化版本）
+     * 
+     * <p>使用预分配的HashMap和putAll方法，显著提高批量写入性能。</p>
+     * 
+     * @param sourceId 数据源ID
+     * @param dataPoints 数据点列表，不能为null
+     * @throws IllegalArgumentException 如果参数无效
+     */
+    public void putBatch(String sourceId, List<DataPoint> dataPoints) {
+        if (sourceId == null || sourceId.trim().isEmpty()) {
+            throw new IllegalArgumentException("数据源ID不能为空");
+        }
         if (dataPoints == null) {
             throw new IllegalArgumentException("数据点列表不能为null");
         }
@@ -169,6 +321,8 @@ public class ObjectTimeSeriesDb {
         if (dataPoints.isEmpty()) {
             return; // 空列表直接返回
         }
+        
+        ConcurrentNavigableMap<Long, Object> sourceData = getOrCreateSource(sourceId);
         
         // 预分配容量，避免HashMap扩容开销
         Map<Long, Object> dataMap = new HashMap<>(dataPoints.size());
@@ -181,7 +335,8 @@ public class ObjectTimeSeriesDb {
             }
             dataMap.put(point.getTimestamp(), point.getValue());
         }
-        timeSeriesData.putAll(dataMap);
+        
+        sourceData.putAll(dataMap);
         db.commit(); // 批量提交事务
     }
     
@@ -189,14 +344,32 @@ public class ObjectTimeSeriesDb {
      * 获取数据（返回Object类型）
      */
     public Object get(long timestamp) {
-        return timeSeriesData.get(timestamp);
+        return get("default", timestamp);
+    }
+    
+    /**
+     * 获取指定数据源的数据（返回Object类型）
+     */
+    public Object get(String sourceId, long timestamp) {
+        ConcurrentNavigableMap<Long, Object> sourceData = dataSources.get(sourceId);
+        if (sourceData == null) {
+            return null;
+        }
+        return sourceData.get(timestamp);
     }
     
     /**
      * 获取Double类型数据
      */
     public Double getDouble(long timestamp) {
-        Object value = timeSeriesData.get(timestamp);
+        return getDouble("default", timestamp);
+    }
+    
+    /**
+     * 获取指定数据源的Double类型数据
+     */
+    public Double getDouble(String sourceId, long timestamp) {
+        Object value = get(sourceId, timestamp);
         if (value instanceof Double) {
             return (Double) value;
         }
@@ -207,7 +380,14 @@ public class ObjectTimeSeriesDb {
      * 获取Integer类型数据
      */
     public Integer getInteger(long timestamp) {
-        Object value = timeSeriesData.get(timestamp);
+        return getInteger("default", timestamp);
+    }
+    
+    /**
+     * 获取指定数据源的Integer类型数据
+     */
+    public Integer getInteger(String sourceId, long timestamp) {
+        Object value = get(sourceId, timestamp);
         if (value instanceof Integer) {
             return (Integer) value;
         }
@@ -218,7 +398,14 @@ public class ObjectTimeSeriesDb {
      * 获取String类型数据
      */
     public String getString(long timestamp) {
-        Object value = timeSeriesData.get(timestamp);
+        return getString("default", timestamp);
+    }
+    
+    /**
+     * 获取指定数据源的String类型数据
+     */
+    public String getString(String sourceId, long timestamp) {
+        Object value = get(sourceId, timestamp);
         if (value instanceof String) {
             return (String) value;
         }
@@ -229,15 +416,33 @@ public class ObjectTimeSeriesDb {
      * 时间范围查询
      */
     public NavigableMap<Long, Object> queryRange(long startTime, long endTime) {
-        return timeSeriesData.subMap(startTime, true, endTime, true);
+        return queryRange("default", startTime, endTime);
+    }
+    
+    /**
+     * 查询指定数据源的时间范围内的数据
+     */
+    public NavigableMap<Long, Object> queryRange(String sourceId, long startTime, long endTime) {
+        ConcurrentNavigableMap<Long, Object> sourceData = dataSources.get(sourceId);
+        if (sourceData == null) {
+            return new TreeMap<>();
+        }
+        return sourceData.subMap(startTime, true, endTime, true);
     }
     
     /**
      * 按类型过滤的时间范围查询
      */
     public <T> List<TypedDataPoint<T>> queryRangeByType(long startTime, long endTime, Class<T> type) {
+        return queryRangeByType("default", startTime, endTime, type);
+    }
+    
+    /**
+     * 查询指定数据源按类型过滤的时间范围查询
+     */
+    public <T> List<TypedDataPoint<T>> queryRangeByType(String sourceId, long startTime, long endTime, Class<T> type) {
         List<TypedDataPoint<T>> result = new ArrayList<>();
-        NavigableMap<Long, Object> rangeData = timeSeriesData.subMap(startTime, true, endTime, true);
+        NavigableMap<Long, Object> rangeData = queryRange(sourceId, startTime, endTime);
         
         for (Map.Entry<Long, Object> entry : rangeData.entrySet()) {
             if (type.isInstance(entry.getValue())) {
@@ -252,12 +457,24 @@ public class ObjectTimeSeriesDb {
      * 获取最新N个数据点
      */
     public List<DataPoint> getLatest(int count) {
+        return getLatest("default", count);
+    }
+    
+    /**
+     * 获取指定数据源的最新N个数据点
+     */
+    public List<DataPoint> getLatest(String sourceId, int count) {
+        ConcurrentNavigableMap<Long, Object> sourceData = dataSources.get(sourceId);
+        if (sourceData == null) {
+            return new ArrayList<>();
+        }
+        
         List<DataPoint> result = new ArrayList<>();
-        Map.Entry<Long, Object> entry = timeSeriesData.lastEntry();
+        Map.Entry<Long, Object> entry = sourceData.lastEntry();
         
         for (int i = 0; i < count && entry != null; i++) {
             result.add(new DataPoint(entry.getKey(), entry.getValue()));
-            entry = timeSeriesData.lowerEntry(entry.getKey());
+            entry = sourceData.lowerEntry(entry.getKey());
         }
         
         return result;
@@ -268,11 +485,36 @@ public class ObjectTimeSeriesDb {
      */
     public DBStats getStats() {
         long storageSize = getStorageSize();
+        long totalDataPoints = dataSources.values().stream()
+            .mapToLong(ConcurrentNavigableMap::size)
+            .sum();
         return new DBStats(
-            timeSeriesData.size(),
+            totalDataPoints,
             storageSize,
             System.currentTimeMillis()
         );
+    }
+    
+    /**
+     * 加载现有的数据源
+     */
+    private void loadExistingDataSources() {
+        // 尝试加载"default"数据源（向后兼容）
+        try {
+            ConcurrentNavigableMap<Long, Object> defaultSource = db.treeMap("default")
+                    .keySerializer(Serializer.LONG_PACKED)
+                    .valueSerializer(Serializer.JAVA)
+                    .createOrOpen();
+            if (!defaultSource.isEmpty()) {
+                dataSources.put("default", defaultSource);
+            }
+        } catch (Exception e) {
+            // 如果加载失败，忽略错误
+        }
+        
+        // 这里可以添加逻辑来发现其他数据源
+        // 由于MapDB的限制，我们无法直接枚举所有表名
+        // 所以采用按需创建的方式
     }
     
     /**
@@ -296,9 +538,33 @@ public class ObjectTimeSeriesDb {
      */
     private void cleanupOldData() {
         long thirtyDaysAgo = System.currentTimeMillis() - 30L * 24 * 3600 * 1000;
-        timeSeriesData.headMap(thirtyDaysAgo).clear();
-        db.commit();
-        System.out.println("清理了30天前的历史数据");
+        int totalCleaned = 0;
+        
+        for (ConcurrentNavigableMap<Long, Object> sourceData : dataSources.values()) {
+            int cleaned = sourceData.headMap(thirtyDaysAgo).size();
+            sourceData.headMap(thirtyDaysAgo).clear();
+            totalCleaned += cleaned;
+        }
+        
+        if (totalCleaned > 0) {
+            db.commit();
+            System.out.println("清理了" + totalCleaned + "个30天前的历史数据点");
+        }
+    }
+    
+    /**
+     * 获取或创建数据源
+     * 
+     * @param sourceId 数据源ID
+     * @return 数据源映射
+     */
+    private ConcurrentNavigableMap<Long, Object> getOrCreateSource(String sourceId) {
+        ConcurrentNavigableMap<Long, Object> sourceData = dataSources.get(sourceId);
+        if (sourceData == null) {
+            createDataSource(sourceId);
+            sourceData = dataSources.get(sourceId);
+        }
+        return sourceData;
     }
     
     /**
