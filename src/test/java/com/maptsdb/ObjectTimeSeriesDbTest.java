@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.*;
 public class ObjectTimeSeriesDbTest {
     
     private ObjectTimeSeriesDb tsdb;
-    private String testDbPath = "test_multitype_timeseries.db";
+    private String testDbPath = "test_object_timeseries.db";
     
     @BeforeEach
     void setUp() {
