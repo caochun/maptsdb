@@ -521,7 +521,7 @@ public class ObjectTimeSeriesDb {
      * 获取数据库文件存储大小
      * @return 存储大小（字节）
      */
-    private long getStorageSize() {
+    public long getStorageSize() {
         try {
             java.io.File dbFile = new java.io.File(dbPath);
             if (dbFile.exists()) {
