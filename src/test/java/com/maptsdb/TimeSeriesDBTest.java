@@ -189,4 +189,32 @@ public class TimeSeriesDBTest {
         TimeSeriesDB.DBStats stats = tsdb.getStats();
         assertTrue(stats.getDataPointCount() >= threadCount * dataPointsPerThread * 0.9);
     }
+    
+    @Test
+    @DisplayName("测试参数验证")
+    void testParameterValidation() {
+        // 测试负数时间戳
+        assertThrows(IllegalArgumentException.class, () -> {
+            tsdb.put(-1, 25.5);
+        });
+        
+        // 测试空数据点列表
+        assertThrows(IllegalArgumentException.class, () -> {
+            tsdb.putBatch(null);
+        });
+        
+        // 测试时间范围查询参数
+        assertThrows(IllegalArgumentException.class, () -> {
+            tsdb.queryRange(1000, 500); // startTime > endTime
+        });
+        
+        // 测试getLatest参数
+        assertThrows(IllegalArgumentException.class, () -> {
+            tsdb.getLatest(0); // count <= 0
+        });
+        
+        assertThrows(IllegalArgumentException.class, () -> {
+            tsdb.getLatest(-1); // count < 0
+        });
+    }
 }

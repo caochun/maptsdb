@@ -207,4 +207,60 @@ public class ObjectTimeSeriesDbTest {
         assertTrue(retrievedValue instanceof String);
         assertEquals(value, retrievedValue);
     }
+    
+    @Test
+    @DisplayName("测试批量写入")
+    void testBatchWrite() {
+        long baseTime = System.currentTimeMillis();
+        List<ObjectTimeSeriesDb.DataPoint> dataPoints = new ArrayList<>();
+        
+        // 创建不同类型的数据点
+        dataPoints.add(new ObjectTimeSeriesDb.DataPoint(baseTime, 25.5));
+        dataPoints.add(new ObjectTimeSeriesDb.DataPoint(baseTime + 1, 65));
+        dataPoints.add(new ObjectTimeSeriesDb.DataPoint(baseTime + 2, "ACTIVE"));
+        dataPoints.add(new ObjectTimeSeriesDb.DataPoint(baseTime + 3, true));
+        
+        tsdb.putBatch(dataPoints);
+        
+        // 验证数据
+        assertEquals(25.5, tsdb.getDouble(baseTime));
+        assertEquals(Integer.valueOf(65), tsdb.getInteger(baseTime + 1));
+        assertEquals("ACTIVE", tsdb.getString(baseTime + 2));
+        assertEquals(Boolean.TRUE, tsdb.get(baseTime + 3));
+    }
+    
+    @Test
+    @DisplayName("测试获取最新数据")
+    void testGetLatest() {
+        long baseTime = System.currentTimeMillis();
+        
+        // 插入10个数据点
+        for (int i = 0; i < 10; i++) {
+            tsdb.putDouble(baseTime + i, 100.0 + i);
+        }
+        
+        // 获取最新5个数据点
+        List<ObjectTimeSeriesDb.DataPoint> latest = tsdb.getLatest(5);
+        assertEquals(5, latest.size());
+        assertEquals(baseTime + 9, latest.get(0).getTimestamp()); // 最新的时间戳
+        assertEquals(109.0, latest.get(0).getValue());
+    }
+    
+    @Test
+    @DisplayName("测试参数验证")
+    void testParameterValidation() {
+        // 测试通用put方法的参数验证
+        assertThrows(IllegalArgumentException.class, () -> {
+            tsdb.put(-1, 25.5); // 负数时间戳
+        });
+        
+        assertThrows(IllegalArgumentException.class, () -> {
+            tsdb.put(System.currentTimeMillis(), null); // null值
+        });
+        
+        // 测试空数据点列表
+        assertThrows(IllegalArgumentException.class, () -> {
+            tsdb.putBatch(null);
+        });
+    }
 }
