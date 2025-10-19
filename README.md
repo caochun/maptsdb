@@ -83,9 +83,14 @@ TimeSeriesDatabase db = TimeSeriesDatabaseBuilder.builder()
 ```
 
 #### 步骤2：写入数据
+
+MapTSDB提供两种数据写入方式，可根据性能需求选择：
+
+**方式1：手工commit（推荐，性能最优）**
 ```java
-// 单条写入（高性能）
 long timestamp = System.currentTimeMillis();
+
+// 写入数据（不自动提交）
 db.putDouble("temperature", timestamp, 25.6);
 db.putInteger("humidity", timestamp, 65);
 db.putStringToObject("status", timestamp, "正常");
@@ -93,6 +98,21 @@ db.putStringToObject("status", timestamp, "正常");
 // 重要：手动提交事务（提升性能的关键）
 db.commit();
 ```
+
+**方式2：putAndCommit（便利方法，自动提交）**
+```java
+long timestamp = System.currentTimeMillis();
+
+// 写入数据并自动提交（便利但性能略低）
+db.putDoubleAndCommit("temperature", timestamp, 25.6);
+db.putIntegerAndCommit("humidity", timestamp, 65);
+db.putStringToObjectAndCommit("status", timestamp, "正常");
+```
+
+**性能对比：**
+- **手工commit**：适合批量操作，性能最优
+- **putAndCommit**：适合单条操作，使用便利
+- **建议**：数据量 >10条时使用手工commit，单条操作可使用putAndCommit
 
 #### 步骤3：批量写入（推荐）
 ```java
