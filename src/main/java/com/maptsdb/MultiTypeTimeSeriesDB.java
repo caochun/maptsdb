@@ -10,7 +10,9 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Map;
+import java.util.HashMap;
 import java.util.NavigableMap;
+import java.util.stream.Collectors;
 
 /**
  * 支持多种数据类型的时序数据库
@@ -118,6 +120,37 @@ public class MultiTypeTimeSeriesDB {
             timeSeriesData.put(point.getTimestamp(), point.getValue());
         }
         db.commit(); // 批量提交事务
+    }
+    
+    /**
+     * 优化的批量写入方法（使用putAll）
+     * @param dataPoints 数据点列表
+     */
+    public void putBatchOptimized(List<DataPoint> dataPoints) {
+        // 预分配容量，避免HashMap扩容开销
+        Map<Long, Object> dataMap = new HashMap<>(dataPoints.size());
+        for (DataPoint point : dataPoints) {
+            dataMap.put(point.getTimestamp(), point.getValue());
+        }
+        timeSeriesData.putAll(dataMap);
+        db.commit(); // 批量提交事务
+    }
+    
+    /**
+     * 超高性能批量写入方法（使用Stream API）
+     * @param dataPoints 数据点列表
+     */
+    public void putBatchUltraFast(List<DataPoint> dataPoints) {
+        // 使用Stream API一次性转换，避免中间集合
+        Map<Long, Object> dataMap = dataPoints.stream()
+            .collect(Collectors.toMap(
+                DataPoint::getTimestamp,
+                DataPoint::getValue,
+                (existing, replacement) -> replacement, // 处理重复键
+                () -> new HashMap<>(dataPoints.size()) // 预分配容量
+            ));
+        timeSeriesData.putAll(dataMap);
+        db.commit();
     }
     
     /**

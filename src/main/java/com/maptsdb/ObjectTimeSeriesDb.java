@@ -13,34 +13,35 @@ import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
- * 基于MapDB的时序数据存储系统
+ * 支持多种数据类型的时序数据库
  * 
- * <p>支持高频写入、时间范围查询和数据压缩，专为物联网和边缘计算场景设计。</p>
+ * <p>支持Double、Integer、Long、String、Boolean、Float等多种数据类型的时序数据存储。</p>
  * 
  * <p>主要特性：</p>
  * <ul>
- *   <li>高性能写入：支持每秒数十万数据点的写入性能</li>
- *   <li>时间范围查询：高效的时间序列数据查询</li>
- *   <li>数据压缩：内置序列化器，减少存储空间</li>
+ *   <li>多类型支持：支持6种基本数据类型</li>
+ *   <li>类型安全：提供类型安全的getter方法</li>
+ *   <li>类型过滤查询：支持按数据类型过滤查询</li>
+ *   <li>高性能存储：基于MapDB的高性能存储引擎</li>
  *   <li>并发支持：原生支持多线程并发操作</li>
- *   <li>嵌入式部署：无需独立数据库进程，适合边缘设备</li>
  * </ul>
  * 
  * @author MapTSDB Team
  * @version 1.0.0
  * @since 1.0.0
  */
-public class TimeSeriesDB {
+public class ObjectTimeSeriesDb {
     
     // ==================== 私有字段 ====================
     
     /** MapDB数据库实例 */
     private final DB db;
     
-    /** 时序数据存储映射 */
-    private final ConcurrentNavigableMap<Long, Double> timeSeriesData;
+    /** 时序数据存储映射（支持任意对象类型） */
+    private final ConcurrentNavigableMap<Long, Object> timeSeriesData;
     
     /** 定时任务调度器 */
     private final ScheduledExecutorService scheduler;
@@ -51,12 +52,12 @@ public class TimeSeriesDB {
     // ==================== 构造函数 ====================
     
     /**
-     * 创建时序数据库实例
+     * 创建多类型时序数据库实例
      * 
      * @param dbPath 数据库文件路径，如果文件不存在会自动创建
      * @throws IllegalArgumentException 如果dbPath为null或空字符串
      */
-    public TimeSeriesDB(String dbPath) {
+    public ObjectTimeSeriesDb(String dbPath) {
         if (dbPath == null || dbPath.trim().isEmpty()) {
             throw new IllegalArgumentException("数据库路径不能为空");
         }
@@ -73,11 +74,11 @@ public class TimeSeriesDB {
                 .concurrencyScale(16)      // 设置并发级别，支持多线程操作
                 .make();
         
-        // 创建时序数据存储结构
-        // 使用标准序列化器（MapDB 3.1.0中增量编码和压缩序列化器的API可能不同）
+        // 创建时序数据存储结构 - 使用通用Object类型
+        // 使用标准序列化器（MapDB 3.1.0中增量编码序列化器的API可能不同）
         this.timeSeriesData = db.treeMap("time_series")
                 .keySerializer(Serializer.LONG)    // 时间戳序列化
-                .valueSerializer(Serializer.DOUBLE) // 浮点数序列化
+                .valueSerializer(Serializer.JAVA) // 使用Java序列化器支持任意对象
                 .createOrOpen();
         
         // 初始化定时任务调度器
@@ -87,26 +88,74 @@ public class TimeSeriesDB {
         scheduler.scheduleAtFixedRate(this::cleanupOldData, 1, 1, TimeUnit.HOURS);
     }
     
-    // ==================== 公共方法 ====================
-    
     /**
-     * 写入单个时序数据点
-     * 
-     * @param timestamp 时间戳（毫秒）
-     * @param value 数据值
-     * @throws IllegalArgumentException 如果timestamp小于0
+     * 写入Double类型数据
      */
-    public void put(long timestamp, double value) {
-        if (timestamp < 0) {
-            throw new IllegalArgumentException("时间戳不能为负数");
-        }
-        
+    public void putDouble(long timestamp, double value) {
         timeSeriesData.put(timestamp, value);
-        db.commit(); // 立即提交事务，确保数据持久化
+        db.commit();
     }
     
     /**
-     * 批量写入时序数据（优化版本）
+     * 写入Integer类型数据
+     */
+    public void putInteger(long timestamp, int value) {
+        timeSeriesData.put(timestamp, value);
+        db.commit();
+    }
+    
+    /**
+     * 写入Long类型数据
+     */
+    public void putLong(long timestamp, long value) {
+        timeSeriesData.put(timestamp, value);
+        db.commit();
+    }
+    
+    /**
+     * 写入String类型数据
+     */
+    public void putString(long timestamp, String value) {
+        timeSeriesData.put(timestamp, value);
+        db.commit();
+    }
+    
+    /**
+     * 写入Boolean类型数据
+     */
+    public void putBoolean(long timestamp, boolean value) {
+        timeSeriesData.put(timestamp, value);
+        db.commit();
+    }
+    
+    /**
+     * 写入Float类型数据
+     */
+    public void putFloat(long timestamp, float value) {
+        timeSeriesData.put(timestamp, value);
+        db.commit();
+    }
+    
+    /**
+     * 通用写入方法
+     * 
+     * @param timestamp 时间戳（毫秒）
+     * @param value 任意类型的数据值
+     * @throws IllegalArgumentException 如果timestamp小于0或value为null
+     */
+    public void put(long timestamp, Object value) {
+        if (timestamp < 0) {
+            throw new IllegalArgumentException("时间戳不能为负数");
+        }
+        if (value == null) {
+            throw new IllegalArgumentException("数据值不能为null");
+        }
+        timeSeriesData.put(timestamp, value);
+        db.commit();
+    }
+    
+    /**
+     * 批量写入数据点（优化版本）
      * 
      * <p>使用预分配的HashMap和putAll方法，显著提高批量写入性能。</p>
      * 
@@ -123,7 +172,7 @@ public class TimeSeriesDB {
         }
         
         // 预分配容量，避免HashMap扩容开销
-        Map<Long, Double> dataMap = new HashMap<>(dataPoints.size());
+        Map<Long, Object> dataMap = new HashMap<>(dataPoints.size());
         for (DataPoint point : dataPoints) {
             if (point == null) {
                 throw new IllegalArgumentException("数据点不能为null");
@@ -133,51 +182,79 @@ public class TimeSeriesDB {
             }
             dataMap.put(point.getTimestamp(), point.getValue());
         }
-        
         timeSeriesData.putAll(dataMap);
         db.commit(); // 批量提交事务
     }
     
     /**
-     * 获取指定时间戳的数据
-     * 
-     * @param timestamp 时间戳
-     * @return 数据值，如果不存在返回null
+     * 获取数据（返回Object类型）
      */
-    public Double get(long timestamp) {
+    public Object get(long timestamp) {
         return timeSeriesData.get(timestamp);
     }
     
     /**
-     * 时间范围查询
-     * 
-     * @param startTime 开始时间戳（包含）
-     * @param endTime 结束时间戳（包含）
-     * @return 时间范围内的数据映射，按时间戳排序
-     * @throws IllegalArgumentException 如果startTime > endTime
+     * 获取Double类型数据
      */
-    public NavigableMap<Long, Double> queryRange(long startTime, long endTime) {
-        if (startTime > endTime) {
-            throw new IllegalArgumentException("开始时间不能大于结束时间");
+    public Double getDouble(long timestamp) {
+        Object value = timeSeriesData.get(timestamp);
+        if (value instanceof Double) {
+            return (Double) value;
         }
-        
+        return null;
+    }
+    
+    /**
+     * 获取Integer类型数据
+     */
+    public Integer getInteger(long timestamp) {
+        Object value = timeSeriesData.get(timestamp);
+        if (value instanceof Integer) {
+            return (Integer) value;
+        }
+        return null;
+    }
+    
+    /**
+     * 获取String类型数据
+     */
+    public String getString(long timestamp) {
+        Object value = timeSeriesData.get(timestamp);
+        if (value instanceof String) {
+            return (String) value;
+        }
+        return null;
+    }
+    
+    /**
+     * 时间范围查询
+     */
+    public NavigableMap<Long, Object> queryRange(long startTime, long endTime) {
         return timeSeriesData.subMap(startTime, true, endTime, true);
     }
     
     /**
-     * 获取最新N个数据点
-     * 
-     * @param count 数据点数量，必须大于0
-     * @return 最新的数据点列表，按时间戳降序排列
-     * @throws IllegalArgumentException 如果count <= 0
+     * 按类型过滤的时间范围查询
      */
-    public List<DataPoint> getLatest(int count) {
-        if (count <= 0) {
-            throw new IllegalArgumentException("数据点数量必须大于0");
+    public <T> List<TypedDataPoint<T>> queryRangeByType(long startTime, long endTime, Class<T> type) {
+        List<TypedDataPoint<T>> result = new ArrayList<>();
+        NavigableMap<Long, Object> rangeData = timeSeriesData.subMap(startTime, true, endTime, true);
+        
+        for (Map.Entry<Long, Object> entry : rangeData.entrySet()) {
+            if (type.isInstance(entry.getValue())) {
+                result.add(new TypedDataPoint<>(entry.getKey(), type.cast(entry.getValue())));
+            }
         }
         
+        return result;
+    }
+    
+    /**
+     * 获取最新N个数据点
+     */
+    public List<DataPoint> getLatest(int count) {
         List<DataPoint> result = new ArrayList<>();
-        Map.Entry<Long, Double> entry = timeSeriesData.lastEntry();
+        Map.Entry<Long, Object> entry = timeSeriesData.lastEntry();
         
         for (int i = 0; i < count && entry != null; i++) {
             result.add(new DataPoint(entry.getKey(), entry.getValue()));
@@ -188,9 +265,7 @@ public class TimeSeriesDB {
     }
     
     /**
-     * 获取数据库统计信息
-     * 
-     * @return 数据库统计信息，包含数据点数量、存储大小和最后更新时间
+     * 获取数据统计信息
      */
     public DBStats getStats() {
         long storageSize = getStorageSize();
@@ -202,21 +277,8 @@ public class TimeSeriesDB {
     }
     
     /**
-     * 关闭数据库连接
-     * 
-     * <p>关闭定时任务调度器和数据库连接，释放所有资源。</p>
-     */
-    public void close() {
-        scheduler.shutdown();
-        db.close();
-    }
-    
-    // ==================== 私有方法 ====================
-    
-    /**
      * 获取数据库文件存储大小
-     * 
-     * @return 存储大小（字节），如果获取失败返回0
+     * @return 存储大小（字节）
      */
     private long getStorageSize() {
         try {
@@ -232,8 +294,6 @@ public class TimeSeriesDB {
     
     /**
      * 清理过期数据（保留30天）
-     * 
-     * <p>自动清理30天前的历史数据，减少存储空间占用。</p>
      */
     private void cleanupOldData() {
         long thirtyDaysAgo = System.currentTimeMillis() - 30L * 24 * 3600 * 1000;
@@ -242,125 +302,75 @@ public class TimeSeriesDB {
         System.out.println("清理了30天前的历史数据");
     }
     
-    // ==================== 内部类 ====================
+    /**
+     * 关闭数据库连接
+     */
+    public void close() {
+        scheduler.shutdown();
+        db.close();
+    }
     
     /**
-     * 时序数据点
-     * 
-     * <p>表示一个时序数据点，包含时间戳和数值。</p>
+     * 通用数据点类
      */
     public static class DataPoint {
-        
-        /** 时间戳（毫秒） */
         private final long timestamp;
+        private final Object value;
         
-        /** 数据值 */
-        private final double value;
-        
-        /**
-         * 创建数据点
-         * 
-         * @param timestamp 时间戳（毫秒）
-         * @param value 数据值
-         */
-        public DataPoint(long timestamp, double value) {
+        public DataPoint(long timestamp, Object value) {
             this.timestamp = timestamp;
             this.value = value;
         }
         
-        /**
-         * 获取时间戳
-         * 
-         * @return 时间戳（毫秒）
-         */
-        public long getTimestamp() { 
-            return timestamp; 
-        }
-        
-        /**
-         * 获取数据值
-         * 
-         * @return 数据值
-         */
-        public double getValue() { 
-            return value; 
-        }
+        public long getTimestamp() { return timestamp; }
+        public Object getValue() { return value; }
         
         @Override
         public String toString() {
-            return String.format("DataPoint{timestamp=%d, value=%.2f}", timestamp, value);
-        }
-        
-        @Override
-        public boolean equals(Object obj) {
-            if (this == obj) return true;
-            if (obj == null || getClass() != obj.getClass()) return false;
-            DataPoint dataPoint = (DataPoint) obj;
-            return timestamp == dataPoint.timestamp && 
-                   Double.compare(dataPoint.value, value) == 0;
-        }
-        
-        @Override
-        public int hashCode() {
-            return Long.hashCode(timestamp) ^ Double.hashCode(value);
+            return String.format("DataPoint{timestamp=%d, value=%s, type=%s}", 
+                timestamp, value, value != null ? value.getClass().getSimpleName() : "null");
         }
     }
     
     /**
-     * 数据库统计信息
-     * 
-     * <p>包含数据库的基本统计信息，如数据点数量、存储大小等。</p>
+     * 类型化数据点类
+     */
+    public static class TypedDataPoint<T> {
+        private final long timestamp;
+        private final T value;
+        
+        public TypedDataPoint(long timestamp, T value) {
+            this.timestamp = timestamp;
+            this.value = value;
+        }
+        
+        public long getTimestamp() { return timestamp; }
+        public T getValue() { return value; }
+        
+        @Override
+        public String toString() {
+            return String.format("TypedDataPoint{timestamp=%d, value=%s, type=%s}", 
+                timestamp, value, value != null ? value.getClass().getSimpleName() : "null");
+        }
+    }
+    
+    /**
+     * 数据库统计信息类
      */
     public static class DBStats {
-        
-        /** 数据点数量 */
         private final long dataPointCount;
-        
-        /** 存储大小（字节） */
         private final long storageSize;
-        
-        /** 最后更新时间 */
         private final long lastUpdateTime;
         
-        /**
-         * 创建统计信息
-         * 
-         * @param dataPointCount 数据点数量
-         * @param storageSize 存储大小（字节）
-         * @param lastUpdateTime 最后更新时间
-         */
         public DBStats(long dataPointCount, long storageSize, long lastUpdateTime) {
             this.dataPointCount = dataPointCount;
             this.storageSize = storageSize;
             this.lastUpdateTime = lastUpdateTime;
         }
         
-        /**
-         * 获取数据点数量
-         * 
-         * @return 数据点数量
-         */
-        public long getDataPointCount() { 
-            return dataPointCount; 
-        }
-        
-        /**
-         * 获取存储大小
-         * 
-         * @return 存储大小（字节）
-         */
-        public long getStorageSize() { 
-            return storageSize; 
-        }
-        
-        /**
-         * 获取最后更新时间
-         * 
-         * @return 最后更新时间（毫秒）
-         */
-        public long getLastUpdateTime() { 
-            return lastUpdateTime; 
-        }
+        public long getDataPointCount() { return dataPointCount; }
+        public long getStorageSize() { return storageSize; }
+        public long getLastUpdateTime() { return lastUpdateTime; }
         
         @Override
         public String toString() {

@@ -11,11 +11,11 @@ import java.io.File;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * MultiTypeTimeSeriesDB单元测试
+ * ObjectTimeSeriesDb单元测试
  */
-public class MultiTypeTimeSeriesDBTest {
+public class ObjectTimeSeriesDbTest {
     
-    private MultiTypeTimeSeriesDB tsdb;
+    private ObjectTimeSeriesDb tsdb;
     private String testDbPath = "test_multitype_timeseries.db";
     
     @BeforeEach
@@ -26,7 +26,7 @@ public class MultiTypeTimeSeriesDBTest {
             dbFile.delete();
         }
         
-        tsdb = new MultiTypeTimeSeriesDB(testDbPath);
+        tsdb = new ObjectTimeSeriesDb(testDbPath);
     }
     
     @AfterEach
@@ -136,17 +136,17 @@ public class MultiTypeTimeSeriesDBTest {
         tsdb.putInteger(baseTime + 5000, 70);
         
         // 查询Double类型数据
-        List<MultiTypeTimeSeriesDB.TypedDataPoint<Double>> doubleData = 
+        List<ObjectTimeSeriesDb.TypedDataPoint<Double>> doubleData = 
             tsdb.queryRangeByType(baseTime, baseTime + 10000, Double.class);
         assertEquals(2, doubleData.size());
         
         // 查询Integer类型数据
-        List<MultiTypeTimeSeriesDB.TypedDataPoint<Integer>> integerData = 
+        List<ObjectTimeSeriesDb.TypedDataPoint<Integer>> integerData = 
             tsdb.queryRangeByType(baseTime, baseTime + 10000, Integer.class);
         assertEquals(2, integerData.size());
         
         // 查询String类型数据
-        List<MultiTypeTimeSeriesDB.TypedDataPoint<String>> stringData = 
+        List<ObjectTimeSeriesDb.TypedDataPoint<String>> stringData = 
             tsdb.queryRangeByType(baseTime, baseTime + 10000, String.class);
         assertEquals(1, stringData.size());
     }
@@ -182,7 +182,7 @@ public class MultiTypeTimeSeriesDBTest {
         tsdb.close();
         
         // 重新打开数据库
-        MultiTypeTimeSeriesDB newTsdb = new MultiTypeTimeSeriesDB(testDbPath);
+        ObjectTimeSeriesDb newTsdb = new ObjectTimeSeriesDb(testDbPath);
         
         // 验证数据仍然存在
         String retrievedValue = newTsdb.getString(timestamp);
