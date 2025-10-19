@@ -1,9 +1,5 @@
 package com.maptsdb;
 
-import org.mapdb.DB;
-import org.mapdb.DBMaker;
-import org.mapdb.Serializer;
-
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -13,6 +9,10 @@ import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+
+import org.mapdb.DB;
+import org.mapdb.DBMaker;
+import org.mapdb.Serializer;
 
 /**
  * 时序数据库主类
@@ -43,6 +43,7 @@ public class TimeSeriesDatabase {
     private final Map<String, ConcurrentNavigableMap<Long, Float>> floatMaps;
     private final Map<String, ConcurrentNavigableMap<Long, Object>> objectMaps;
     private final ScheduledExecutorService scheduler;
+    @SuppressWarnings("unused")
     private final TimeSeriesDatabaseBuilder builder; // 用于动态添加数据源
     
     /**
@@ -164,7 +165,8 @@ public class TimeSeriesDatabase {
                 break;
                 
             case OBJECT:
-                ConcurrentNavigableMap<Long, Object> objectMap = db.treeMap(sourceId)
+                @SuppressWarnings("unchecked")
+                ConcurrentNavigableMap<Long, Object> objectMap = (ConcurrentNavigableMap<Long, Object>) db.treeMap(sourceId)
                     .keySerializer(Serializer.LONG_PACKED)
                     .valueSerializer(Serializer.JAVA)
                     .createOrOpen();
