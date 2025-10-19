@@ -1,6 +1,7 @@
 package com.maptsdb;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * MapTSDB 快速开始示例
