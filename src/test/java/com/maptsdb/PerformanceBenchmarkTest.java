@@ -22,7 +22,7 @@ public class PerformanceBenchmarkTest {
     @TempDir
     Path tempDir;
     
-    private TimeSeriesDatabaseBuilder.TimeSeriesDatabase db;
+    private TimeSeriesDatabase db;
     private String dbPath;
     
     @BeforeEach
@@ -47,7 +47,7 @@ public class PerformanceBenchmarkTest {
                 .addObjectSource("object_data")
                 .build();
         
-        int testCount = 10000;
+        int testCount = 1000000;
         long baseTime = System.currentTimeMillis();
         
         // 预热JVM
@@ -124,7 +124,7 @@ public class PerformanceBenchmarkTest {
                 .addObjectSource("object_data")
                 .build();
         
-        int[] batchSizes = {100, 500, 1000, 5000, 10000};
+        int[] batchSizes = {1000, 5000, 10000, 50000, 100000};
         
         for (int batchSize : batchSizes) {
             System.out.println("\n--- 批量大小: " + batchSize + " 条 ---");
@@ -175,7 +175,7 @@ public class PerformanceBenchmarkTest {
                 .build();
         
         int threadCount = 8;
-        int operationsPerThread = 1000;
+        int operationsPerThread = 100000;
         int totalOperations = threadCount * operationsPerThread;
         
         System.out.println("并发线程数: " + threadCount);
@@ -220,8 +220,8 @@ public class PerformanceBenchmarkTest {
             System.out.println("平均每线程速率: " + String.format("%.0f", avgRatePerThread) + " 条/秒");
             
             // 验证数据完整性
-            var stats = db.getStatistics();
-            long actualDataPoints = stats.get("concurrent_data (DOUBLE)");
+            var stats = db.getStatisticsAsLong();
+            long actualDataPoints = stats.get("concurrent_data");
             System.out.println("实际数据点数: " + actualDataPoints);
             
             if (actualDataPoints == totalOperations) {
@@ -248,7 +248,7 @@ public class PerformanceBenchmarkTest {
                 .addObjectSource("object_data")
                 .build();
         
-        int dataCount = 10000;
+        int dataCount = 1000000;
         long baseTime = System.currentTimeMillis();
         
         // 准备测试数据
@@ -298,18 +298,18 @@ public class PerformanceBenchmarkTest {
         String objectDbPath = tempDir.resolve("object_memory.db").toString();
         
         // 创建数值类型数据库
-        TimeSeriesDatabaseBuilder.TimeSeriesDatabase numericDb = TimeSeriesDatabaseBuilder.builder()
+        TimeSeriesDatabase numericDb = TimeSeriesDatabaseBuilder.builder()
                 .path(numericDbPath)
                 .addDoubleSource("data")
                 .build();
         
         // 创建对象类型数据库
-        TimeSeriesDatabaseBuilder.TimeSeriesDatabase objectDb = TimeSeriesDatabaseBuilder.builder()
+        TimeSeriesDatabase objectDb = TimeSeriesDatabaseBuilder.builder()
                 .path(objectDbPath)
                 .addObjectSource("data")
                 .build();
         
-        int dataCount = 10000;
+        int dataCount = 1000000;
         long baseTime = System.currentTimeMillis();
         
         // 写入相同数据
@@ -348,7 +348,7 @@ public class PerformanceBenchmarkTest {
                 .addObjectSource("object_data")
                 .build();
         
-        int testCount = 5000;
+        int testCount = 1000000;
         long baseTime = System.currentTimeMillis();
         
         // 准备数据

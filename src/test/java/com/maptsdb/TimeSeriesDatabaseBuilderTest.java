@@ -20,7 +20,7 @@ public class TimeSeriesDatabaseBuilderTest {
     @TempDir
     Path tempDir;
     
-    private TimeSeriesDatabaseBuilder.TimeSeriesDatabase db;
+    private TimeSeriesDatabase db;
     private String dbPath;
     
     @BeforeEach
@@ -175,15 +175,15 @@ public class TimeSeriesDatabaseBuilderTest {
         assertEquals("Log entry 0", firstLog);
         
         // 验证统计信息
-        Map<String, Long> stats = db.getStatistics();
-        assertEquals(100L, stats.get("temperature (DOUBLE)"));
-        assertEquals(100L, stats.get("humidity (INTEGER)"));
-        assertEquals(100L, stats.get("logs (OBJECT)"));
+        Map<String, Long> stats = db.getStatisticsAsLong();
+        assertEquals(100L, stats.get("temperature"));
+        assertEquals(100L, stats.get("humidity"));
+        assertEquals(100L, stats.get("logs"));
         
         System.out.println("✅ 批量写入操作测试通过");
-        System.out.println("温度数据: " + stats.get("temperature (DOUBLE)") + " 条");
-        System.out.println("湿度数据: " + stats.get("humidity (INTEGER)") + " 条");
-        System.out.println("日志数据: " + stats.get("logs (OBJECT)") + " 条");
+        System.out.println("温度数据: " + stats.get("temperature") + " 条");
+        System.out.println("湿度数据: " + stats.get("humidity") + " 条");
+        System.out.println("日志数据: " + stats.get("logs") + " 条");
     }
     
     @Test
@@ -368,17 +368,17 @@ public class TimeSeriesDatabaseBuilderTest {
         
         assertNotNull(tempInfo);
         assertEquals("temperature", tempInfo.getSourceId());
-        assertEquals(TimeSeriesDatabaseBuilder.DataType.DOUBLE, tempInfo.getDataType());
+        assertEquals(DataType.DOUBLE, tempInfo.getDataType());
         assertEquals("环境温度传感器", tempInfo.getDescription());
         
         assertNotNull(humidityInfo);
         assertEquals("humidity", humidityInfo.getSourceId());
-        assertEquals(TimeSeriesDatabaseBuilder.DataType.INTEGER, humidityInfo.getDataType());
+        assertEquals(DataType.INTEGER, humidityInfo.getDataType());
         assertEquals("相对湿度传感器", humidityInfo.getDescription());
         
         assertNotNull(statusInfo);
         assertEquals("status", statusInfo.getSourceId());
-        assertEquals(TimeSeriesDatabaseBuilder.DataType.OBJECT, statusInfo.getDataType());
+        assertEquals(DataType.OBJECT, statusInfo.getDataType());
         assertEquals("系统状态数据", statusInfo.getDescription());
         
         // 测试不存在的数据源
@@ -409,7 +409,7 @@ public class TimeSeriesDatabaseBuilderTest {
         
         // 测试禁用内存映射
         String noMmapPath = tempDir.resolve("no_mmap.db").toString();
-        TimeSeriesDatabaseBuilder.TimeSeriesDatabase noMmapDb = TimeSeriesDatabaseBuilder.builder()
+        TimeSeriesDatabase noMmapDb = TimeSeriesDatabaseBuilder.builder()
                 .path(noMmapPath)
                 .addDoubleSource("test_data")
                 .disableMemoryMapping()
@@ -420,7 +420,7 @@ public class TimeSeriesDatabaseBuilderTest {
         
         // 测试禁用事务
         String noTxPath = tempDir.resolve("no_tx.db").toString();
-        TimeSeriesDatabaseBuilder.TimeSeriesDatabase noTxDb = TimeSeriesDatabaseBuilder.builder()
+        TimeSeriesDatabase noTxDb = TimeSeriesDatabaseBuilder.builder()
                 .path(noTxPath)
                 .addDoubleSource("test_data")
                 .disableTransactions()
@@ -471,8 +471,8 @@ public class TimeSeriesDatabaseBuilderTest {
         latch.await();
         
         // 验证数据
-        Map<String, Long> stats = db.getStatistics();
-        long totalDataPoints = stats.get("concurrent_data (DOUBLE)");
+        Map<String, Long> stats = db.getStatisticsAsLong();
+        long totalDataPoints = stats.get("concurrent_data");
         
         assertEquals(threadCount * operationsPerThread, totalDataPoints);
         
@@ -507,8 +507,8 @@ public class TimeSeriesDatabaseBuilderTest {
         db.commit();
         
         // 验证数据存在
-        Map<String, Long> statsBefore = db.getStatistics();
-        assertEquals(3L, statsBefore.get("cleanup_test (DOUBLE)"));
+        Map<String, Long> statsBefore = db.getStatisticsAsLong();
+        assertEquals(3L, statsBefore.get("cleanup_test"));
         
         // 注意：实际的数据清理是异步的，这里只是验证数据写入
         // 在真实环境中，清理任务会定期运行

@@ -17,7 +17,7 @@ public class QuickStartExample {
     
     public static void main(String[] args) {
         // 1. 创建数据库实例
-        TimeSeriesDatabaseBuilder.TimeSeriesDatabase db = TimeSeriesDatabaseBuilder.builder()
+        TimeSeriesDatabase db = TimeSeriesDatabaseBuilder.builder()
                 .path("example.db")
                 .addDoubleSource("temperature", "环境温度")
                 .addIntegerSource("humidity", "相对湿度")
@@ -48,7 +48,7 @@ public class QuickStartExample {
     /**
      * 单条写入示例
      */
-    private static void singleWriteExample(TimeSeriesDatabaseBuilder.TimeSeriesDatabase db) {
+    private static void singleWriteExample(TimeSeriesDatabase db) {
         System.out.println("=== 单条写入示例 ===");
         
         long timestamp = System.currentTimeMillis();
@@ -56,7 +56,7 @@ public class QuickStartExample {
         // 写入不同类型的数据
         db.putDouble("temperature", timestamp, 25.6);
         db.putInteger("humidity", timestamp, 65);
-        db.putStringToObject("status", timestamp, "正常");
+        db.putObject("status", timestamp, "正常");
         
         // 重要：手动提交事务（提升性能的关键）
         db.commit();
@@ -67,7 +67,7 @@ public class QuickStartExample {
     /**
      * 批量写入示例
      */
-    private static void batchWriteExample(TimeSeriesDatabaseBuilder.TimeSeriesDatabase db) {
+    private static void batchWriteExample(TimeSeriesDatabase db) {
         System.out.println("\n=== 批量写入示例 ===");
         
         // 准备批量数据
@@ -84,9 +84,9 @@ public class QuickStartExample {
         }
         
         // 批量写入（高性能）
-        db.putDoubleBatch("temperature", tempData);
-        db.putIntegerBatch("humidity", humidityData);
-        db.putObjectBatch("status", statusData);
+        db.putBatchDouble("temperature", tempData);
+        db.putBatchInteger("humidity", humidityData);
+        db.putBatchObject("status", statusData);
         
         // 批量写入后提交事务
         db.commit();
@@ -97,7 +97,7 @@ public class QuickStartExample {
     /**
      * 查询示例
      */
-    private static void queryExample(TimeSeriesDatabaseBuilder.TimeSeriesDatabase db) {
+    private static void queryExample(TimeSeriesDatabase db) {
         System.out.println("\n=== 查询示例 ===");
         
         // 写入一些测试数据
@@ -108,15 +108,15 @@ public class QuickStartExample {
         // 写入多个时间点的数据
         db.putDouble("temperature", timestamp1, 25.6);
         db.putInteger("humidity", timestamp1, 65);
-        db.putStringToObject("status", timestamp1, "正常");
+        db.putObject("status", timestamp1, "正常");
         
         db.putDouble("temperature", timestamp2, 26.1);
         db.putInteger("humidity", timestamp2, 68);
-        db.putStringToObject("status", timestamp2, "警告");
+        db.putObject("status", timestamp2, "警告");
         
         db.putDouble("temperature", timestamp3, 25.8);
         db.putInteger("humidity", timestamp3, 62);
-        db.putStringToObject("status", timestamp3, "正常");
+        db.putObject("status", timestamp3, "正常");
         
         db.commit();
         
@@ -124,13 +124,13 @@ public class QuickStartExample {
         System.out.println("=== 单点查询 ===");
         Double temp1 = db.getDouble("temperature", timestamp1);
         Integer humidity1 = db.getInteger("humidity", timestamp1);
-        String status1 = db.getStringFromObject("status", timestamp1);
+        String status1 = (String) db.getObject("status", timestamp1);
         
         System.out.println("时间点1 - 温度: " + temp1 + "°C, 湿度: " + humidity1 + "%, 状态: " + status1);
         
         Double temp2 = db.getDouble("temperature", timestamp2);
         Integer humidity2 = db.getInteger("humidity", timestamp2);
-        String status2 = db.getStringFromObject("status", timestamp2);
+        String status2 = (String) db.getObject("status", timestamp2);
         
         System.out.println("时间点2 - 温度: " + temp2 + "°C, 湿度: " + humidity2 + "%, 状态: " + status2);
         
@@ -140,13 +140,13 @@ public class QuickStartExample {
         
         // 获取统计信息
         System.out.println("\n=== 数据统计 ===");
-        Map<String, Long> stats = db.getStatistics();
-        System.out.println("数据源统计: " + stats);
+        // 获取数据源统计（这里需要实现统计方法）
+        System.out.println("数据源统计: 需要实现统计方法");
         
         // 获取数据源信息
         System.out.println("数据源信息:");
         for (String sourceId : new String[]{"temperature", "humidity", "status"}) {
-            TimeSeriesDatabaseBuilder.DataSourceConfig config = db.getDataSourceInfo(sourceId);
+            DataSourceConfig config = db.getDataSourceInfo(sourceId);
             if (config != null) {
                 System.out.println("  " + sourceId + ": " + config.getDescription());
             }
@@ -156,7 +156,7 @@ public class QuickStartExample {
     /**
      * 性能测试示例
      */
-    private static void performanceTestExample(TimeSeriesDatabaseBuilder.TimeSeriesDatabase db) {
+    private static void performanceTestExample(TimeSeriesDatabase db) {
         System.out.println("\n=== 性能测试示例 ===");
         
         int testCount = 10000;
@@ -182,7 +182,7 @@ public class QuickStartExample {
         }
         
         startTime = System.currentTimeMillis();
-        db.putDoubleBatch("temperature", batchData);
+        db.putBatchDouble("temperature", batchData);
         db.commit();
         
         long batchTime = System.currentTimeMillis() - startTime;
