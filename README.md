@@ -71,7 +71,7 @@ tsdb.close();
 #### 多数据类型支持
 ```java
 // 创建多类型时序数据库
-MultiTypeTimeSeriesDB tsdb = new MultiTypeTimeSeriesDB("multi_data.db");
+ObjectTimeSeriesDb tsdb = new ObjectTimeSeriesDb("multi_data.db");
 
 // 存储不同类型的数据
 tsdb.putDouble(System.currentTimeMillis(), 25.5);      // 温度
@@ -105,7 +105,7 @@ tsdb.close();
 | 查询延迟 | < 1ms |
 | 内存占用 | 54 KB |
 
-### MultiTypeTimeSeriesDB（多类型）
+### ObjectTimeSeriesDb（多类型）
 | 指标 | 性能 |
 |------|------|
 | 单线程写入 | 1,205 数据点/秒 |
@@ -121,7 +121,7 @@ tsdb.close();
 - **批量写入**：TimeSeriesDB快265.6%
 - **查询性能**：两者相当
 - **内存使用**：两者相当
-- **选择建议**：纯数值用TimeSeriesDB，多类型用MultiTypeTimeSeriesDB
+- **选择建议**：纯数值用TimeSeriesDB，多类型用ObjectTimeSeriesDb
 
 ## 使用场景
 
@@ -132,7 +132,7 @@ TimeSeriesDB temperatureDB = new TimeSeriesDB("temperature.db");
 temperatureDB.put(System.currentTimeMillis(), sensorReading);
 
 // 多类型数据（综合传感器）
-MultiTypeTimeSeriesDB sensorDB = new MultiTypeTimeSeriesDB("sensor_data.db");
+ObjectTimeSeriesDb sensorDB = new ObjectTimeSeriesDb("sensor_data.db");
 sensorDB.putDouble(System.currentTimeMillis(), temperature);  // 温度
 sensorDB.putInteger(System.currentTimeMillis(), humidity);    // 湿度
 sensorDB.putString(System.currentTimeMillis(), status);       // 状态
@@ -141,7 +141,7 @@ sensorDB.putString(System.currentTimeMillis(), status);       // 状态
 ### 工业设备监控
 ```java
 // 设备状态数据
-MultiTypeTimeSeriesDB deviceDB = new MultiTypeTimeSeriesDB("device_monitor.db");
+ObjectTimeSeriesDb deviceDB = new ObjectTimeSeriesDb("device_monitor.db");
 deviceDB.putString(System.currentTimeMillis(), "RUNNING");    // 运行状态
 deviceDB.putBoolean(System.currentTimeMillis(), true);        // 开关状态
 deviceDB.putLong(System.currentTimeMillis(), counter);        // 计数器
@@ -184,20 +184,17 @@ ConcurrentNavigableMap<Long, Double> data = db.treeMap("data")
     .createOrOpen();
 ```
 
-## 运行示例
+## 运行测试
 
 ```bash
-# 运行单类型示例
-mvn exec:java -Dexec.mainClass="com.maptsdb.TimeSeriesExample"
-
-# 运行多类型示例
-mvn exec:java -Dexec.mainClass="com.maptsdb.MultiTypeExample"
-
-# 运行性能对比测试
-mvn exec:java -Dexec.mainClass="com.maptsdb.PerformanceComparison"
-
 # 运行所有测试
 mvn test
+
+# 编译项目
+mvn compile
+
+# 打包项目
+mvn package
 ```
 
 ## 最新更新
