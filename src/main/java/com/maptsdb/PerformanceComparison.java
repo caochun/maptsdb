@@ -6,7 +6,6 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 
 /**
  * TimeSeriesDB vs MultiTypeTimeSeriesDB 性能对比测试
@@ -152,39 +151,39 @@ public class PerformanceComparison {
     private static void compareBatchWrite() {
         System.out.println("=== 批量写入性能对比 ===");
         
-        // 测试TimeSeriesDB
-        long startTime = System.currentTimeMillis();
-        TimeSeriesDB tsdb = new TimeSeriesDB("perf_test_tsdb_batch.db");
+        // 预先创建相同的数据集
+        long baseTime = System.currentTimeMillis();
+        List<TimeSeriesDB.DataPoint> tsdbBatchData = new ArrayList<>();
+        List<MultiTypeTimeSeriesDB.DataPoint> mtsdbBatchData = new ArrayList<>();
         
-        List<TimeSeriesDB.DataPoint> batchData = new ArrayList<>();
         for (int i = 0; i < TEST_DATA_POINTS; i++) {
-            batchData.add(new TimeSeriesDB.DataPoint(
-                System.currentTimeMillis() + i, 
-                ThreadLocalRandom.current().nextDouble(0, 100)));
+            long timestamp = baseTime + i;
+            double value = ThreadLocalRandom.current().nextDouble(0, 100);
+            
+            tsdbBatchData.add(new TimeSeriesDB.DataPoint(timestamp, value));
+            mtsdbBatchData.add(new MultiTypeTimeSeriesDB.DataPoint(timestamp, value));
         }
         
-        tsdb.putBatch(batchData);
-        long tsdbTime = System.currentTimeMillis() - startTime;
+        // 测试TimeSeriesDB写入时间
+        TimeSeriesDB tsdb = new TimeSeriesDB("perf_test_tsdb_batch.db");
+        long startTime = System.currentTimeMillis();
+        tsdb.putBatch(tsdbBatchData);
+        long tsdbWriteTime = System.currentTimeMillis() - startTime;
         tsdb.close();
         
-        // 测试MultiTypeTimeSeriesDB
-        startTime = System.currentTimeMillis();
+        // 测试MultiTypeTimeSeriesDB写入时间
         MultiTypeTimeSeriesDB mtsdb = new MultiTypeTimeSeriesDB("perf_test_mtsdb_batch.db");
-        
-        for (int i = 0; i < TEST_DATA_POINTS; i++) {
-            mtsdb.putDouble(System.currentTimeMillis() + i, 
-                ThreadLocalRandom.current().nextDouble(0, 100));
-        }
-        
-        long mtsdbTime = System.currentTimeMillis() - startTime;
+        startTime = System.currentTimeMillis();
+        mtsdb.putBatch(mtsdbBatchData);
+        long mtsdbWriteTime = System.currentTimeMillis() - startTime;
         mtsdb.close();
         
         System.out.printf("TimeSeriesDB:     %d ms (%d 数据点/秒)%n", 
-            tsdbTime, TEST_DATA_POINTS * 1000 / tsdbTime);
+            tsdbWriteTime, TEST_DATA_POINTS * 1000 / Math.max(tsdbWriteTime, 1));
         System.out.printf("MultiTypeTSDB:   %d ms (%d 数据点/秒)%n", 
-            mtsdbTime, TEST_DATA_POINTS * 1000 / mtsdbTime);
+            mtsdbWriteTime, TEST_DATA_POINTS * 1000 / Math.max(mtsdbWriteTime, 1));
         System.out.printf("性能差异: %.1f%%%n", 
-            (double)(mtsdbTime - tsdbTime) / tsdbTime * 100);
+            (double)(mtsdbWriteTime - tsdbWriteTime) / Math.max(tsdbWriteTime, 1) * 100);
         System.out.println();
     }
     
@@ -218,16 +217,17 @@ public class PerformanceComparison {
         var mtsdbResult = mtsdb.queryRange(queryStart, queryEnd);
         long mtsdbQueryTime = System.currentTimeMillis() - startTime;
         
+        // 先输出结果再关闭数据库
+        System.out.printf("TimeSeriesDB:     %d ms (查询到 %d 个数据点)%n", 
+            tsdbQueryTime, tsdbResult != null ? tsdbResult.size() : 0);
+        System.out.printf("MultiTypeTSDB:   %d ms (查询到 %d 个数据点)%n", 
+            mtsdbQueryTime, mtsdbResult != null ? mtsdbResult.size() : 0);
+        System.out.printf("性能差异: %.1f%%%n", 
+            (double)(mtsdbQueryTime - tsdbQueryTime) / Math.max(tsdbQueryTime, 1) * 100);
+        System.out.println();
+        
         tsdb.close();
         mtsdb.close();
-        
-        System.out.printf("TimeSeriesDB:     %d ms (查询到 %d 个数据点)%n", 
-            tsdbQueryTime, tsdbResult.size());
-        System.out.printf("MultiTypeTSDB:   %d ms (查询到 %d 个数据点)%n", 
-            mtsdbQueryTime, mtsdbResult.size());
-        System.out.printf("性能差异: %.1f%%%n", 
-            (double)(mtsdbQueryTime - tsdbQueryTime) / tsdbQueryTime * 100);
-        System.out.println();
     }
     
     /**

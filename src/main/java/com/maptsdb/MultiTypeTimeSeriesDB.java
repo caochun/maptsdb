@@ -33,8 +33,11 @@ public class MultiTypeTimeSeriesDB {
         // 初始化MapDB数据库
         this.db = DBMaker.fileDB(dbPath)
                 .fileMmapEnable()           // 启用内存映射文件
+                .fileMmapPreclearDisable()  // 禁用预清理以提高性能
+                .cleanerHackEnable()        // 启用清理器以防止内存泄漏
                 .transactionEnable()        // 启用事务支持
                 .closeOnJvmShutdown()      // JVM关闭时自动关闭
+                .concurrencyScale(16)      // 设置并发级别
                 .make();
         
         // 创建时序数据存储结构 - 使用通用Object类型
@@ -104,6 +107,17 @@ public class MultiTypeTimeSeriesDB {
     public void put(long timestamp, Object value) {
         timeSeriesData.put(timestamp, value);
         db.commit();
+    }
+    
+    /**
+     * 批量写入数据点
+     * @param dataPoints 数据点列表
+     */
+    public void putBatch(List<DataPoint> dataPoints) {
+        for (DataPoint point : dataPoints) {
+            timeSeriesData.put(point.getTimestamp(), point.getValue());
+        }
+        db.commit(); // 批量提交事务
     }
     
     /**

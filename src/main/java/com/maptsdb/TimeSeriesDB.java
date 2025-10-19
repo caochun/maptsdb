@@ -33,8 +33,11 @@ public class TimeSeriesDB {
         // 初始化MapDB数据库
         this.db = DBMaker.fileDB(dbPath)
                 .fileMmapEnable()           // 启用内存映射文件
+                .fileMmapPreclearDisable()  // 禁用预清理以提高性能
+                .cleanerHackEnable()        // 启用清理器以防止内存泄漏
                 .transactionEnable()        // 启用事务支持
                 .closeOnJvmShutdown()      // JVM关闭时自动关闭
+                .concurrencyScale(16)      // 设置并发级别
                 .make();
         
         // 创建时序数据存储结构
