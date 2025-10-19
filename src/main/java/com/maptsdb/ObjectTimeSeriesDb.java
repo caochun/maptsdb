@@ -106,7 +106,11 @@ public class ObjectTimeSeriesDb {
             return; // 数据源已存在
         }
         
-        ConcurrentNavigableMap<Long, Object> sourceData = createDataSourceMap(sourceId);
+        var sourceData = db.treeMap(sourceId)
+                .keySerializer(Serializer.LONG)
+                .valueSerializer(Serializer.JAVA)
+                .createOrOpen();
+        
         dataSources.put(sourceId, sourceData);
     }
     
@@ -497,7 +501,10 @@ public class ObjectTimeSeriesDb {
     private void loadExistingDataSources() {
         // 尝试加载"default"数据源（向后兼容）
         try {
-            ConcurrentNavigableMap<Long, Object> defaultSource = createDataSourceMap("default");
+            var defaultSource = db.treeMap("default")
+                    .keySerializer(Serializer.LONG)
+                    .valueSerializer(Serializer.JAVA)
+                    .createOrOpen();
             if (!defaultSource.isEmpty()) {
                 dataSources.put("default", defaultSource);
             }
@@ -545,19 +552,6 @@ public class ObjectTimeSeriesDb {
         }
     }
     
-    /**
-     * 创建数据源映射（处理类型转换）
-     * 
-     * @param sourceId 数据源ID
-     * @return 数据源映射
-     */
-    @SuppressWarnings("unchecked")
-    private ConcurrentNavigableMap<Long, Object> createDataSourceMap(String sourceId) {
-        return (ConcurrentNavigableMap<Long, Object>) db.treeMap(sourceId)
-                .keySerializer(Serializer.LONG)
-                .valueSerializer(Serializer.JAVA)
-                .createOrOpen();
-    }
     
     /**
      * 获取或创建数据源
