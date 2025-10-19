@@ -91,29 +91,33 @@ tsdb.close();
 
 ## 性能指标
 
-根据实际测试结果：
+根据优化后的实际测试结果（10,000个数据点）：
 
 ### TimeSeriesDB（单类型）
 | 指标 | 性能 |
 |------|------|
-| 单线程写入 | 377 数据点/秒 |
-| 批量写入 | 102,040 数据点/秒 |
-| 查询延迟 | 95% < 10ms |
-| 内存占用 | 653 KB (5000数据点) |
+| 单线程写入 | 1,661 数据点/秒 |
+| 多线程写入 | 515 数据点/秒 |
+| 批量写入 | 312,500 数据点/秒 |
+| 查询延迟 | < 1ms |
+| 内存占用 | 54 KB |
 
 ### MultiTypeTimeSeriesDB（多类型）
 | 指标 | 性能 |
 |------|------|
-| 单线程写入 | 374 数据点/秒 |
-| 批量写入 | 375 数据点/秒 |
-| 查询延迟 | 95% < 10ms |
-| 内存占用 | 更优的内存管理 |
+| 单线程写入 | 1,205 数据点/秒 |
+| 多线程写入 | 389 数据点/秒 |
+| 批量写入 | 85,470 数据点/秒 |
+| 查询延迟 | < 1ms |
+| 内存占用 | 57 KB |
 | 支持类型 | 6种数据类型 |
 
 ### 性能对比总结
-- **单线程写入**：性能相当（差异0.7%）
-- **批量写入**：TimeSeriesDB快270倍
-- **功能丰富度**：MultiTypeTimeSeriesDB支持更多数据类型
+- **单线程写入**：TimeSeriesDB快37.8%
+- **多线程写入**：TimeSeriesDB快32.3%
+- **批量写入**：TimeSeriesDB快265.6%
+- **查询性能**：两者相当
+- **内存使用**：两者相当
 - **选择建议**：纯数值用TimeSeriesDB，多类型用MultiTypeTimeSeriesDB
 
 ## 使用场景
@@ -153,6 +157,18 @@ for (int i = 0; i < 1000; i++) {
 
 ## 高级配置
 
+### 性能优化配置（推荐）
+```java
+DB db = DBMaker.fileDB("optimized.db")
+    .fileMmapEnable()           // 启用内存映射文件
+    .fileMmapPreclearDisable()  // 禁用预清理以提高性能
+    .cleanerHackEnable()        // 启用清理器以防止内存泄漏
+    .transactionEnable()        // 启用事务支持
+    .closeOnJvmShutdown()      // JVM关闭时自动关闭
+    .concurrencyScale(16)      // 设置并发级别
+    .make();
+```
+
 ### 自定义序列化器
 ```java
 DB db = DBMaker.fileDB("custom.db")
@@ -165,14 +181,6 @@ ConcurrentNavigableMap<Long, Double> data = db.treeMap("data")
     .createOrOpen();
 ```
 
-### 内存优化配置
-```java
-DB db = DBMaker.fileDB("optimized.db")
-    .cacheSize(512 * 1024 * 1024)  // 512MB缓存
-    .cacheLRUEnable()              // LRU淘汰策略
-    .make();
-```
-
 ## 运行示例
 
 ```bash
@@ -183,13 +191,10 @@ mvn exec:java -Dexec.mainClass="com.maptsdb.TimeSeriesExample"
 mvn exec:java -Dexec.mainClass="com.maptsdb.MultiTypeExample"
 
 # 运行性能对比测试
-mvn exec:java -Dexec.mainClass="com.maptsdb.SimplePerformanceComparison"
+mvn exec:java -Dexec.mainClass="com.maptsdb.PerformanceComparison"
 
 # 运行所有测试
 mvn test
-
-# 查看性能对比报告
-cat PERFORMANCE_COMPARISON.md
 ```
 
 ## 项目结构
@@ -201,14 +206,13 @@ maptsdb/
 │   ├── MultiTypeTimeSeriesDB.java     # 多类型时序数据库类
 │   ├── TimeSeriesExample.java         # 单类型使用示例
 │   ├── MultiTypeExample.java          # 多类型使用示例
-│   ├── SimplePerformanceComparison.java # 性能对比测试
-│   └── PerformanceComparison.java     # 详细性能测试
+│   ├── PerformanceComparison.java     # 性能对比测试
+│   └── SimplePerformanceComparison.java # 简化性能测试
 ├── src/test/java/com/maptsdb/
 │   ├── TimeSeriesDBTest.java          # 单类型单元测试
 │   └── MultiTypeTimeSeriesDBTest.java # 多类型单元测试
 ├── pom.xml                            # Maven配置
 ├── README.md                          # 项目文档
-├── PERFORMANCE_COMPARISON.md          # 性能对比报告
 └── .gitignore                         # Git忽略文件
 ```
 
