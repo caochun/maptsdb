@@ -13,7 +13,6 @@ import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 /**
  * 支持多种数据类型的时序数据库
