@@ -106,7 +106,8 @@ public class ObjectTimeSeriesDb {
             return; // 数据源已存在
         }
         
-        ConcurrentNavigableMap<Long, Object> sourceData = db.treeMap(sourceId)
+        @SuppressWarnings("unchecked")
+        ConcurrentNavigableMap<Long, Object> sourceData = (ConcurrentNavigableMap<Long, Object>) db.treeMap(sourceId)
                 .keySerializer(Serializer.LONG_PACKED)  // 时间戳压缩序列化
                 .valueSerializer(Serializer.JAVA)      // 使用Java序列化器支持任意对象
                 .createOrOpen();
@@ -501,7 +502,8 @@ public class ObjectTimeSeriesDb {
     private void loadExistingDataSources() {
         // 尝试加载"default"数据源（向后兼容）
         try {
-            ConcurrentNavigableMap<Long, Object> defaultSource = db.treeMap("default")
+            @SuppressWarnings("unchecked")
+            ConcurrentNavigableMap<Long, Object> defaultSource = (ConcurrentNavigableMap<Long, Object>) db.treeMap("default")
                     .keySerializer(Serializer.LONG_PACKED)
                     .valueSerializer(Serializer.JAVA)
                     .createOrOpen();
