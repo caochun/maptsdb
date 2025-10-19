@@ -106,12 +106,7 @@ public class ObjectTimeSeriesDb {
             return; // 数据源已存在
         }
         
-        @SuppressWarnings("unchecked")
-        ConcurrentNavigableMap<Long, Object> sourceData = (ConcurrentNavigableMap<Long, Object>) db.treeMap(sourceId)
-                .keySerializer(Serializer.LONG_PACKED)  // 时间戳压缩序列化
-                .valueSerializer(Serializer.JAVA)      // 使用Java序列化器支持任意对象
-                .createOrOpen();
-        
+        ConcurrentNavigableMap<Long, Object> sourceData = createDataSourceMap(sourceId);
         dataSources.put(sourceId, sourceData);
     }
     
@@ -502,11 +497,7 @@ public class ObjectTimeSeriesDb {
     private void loadExistingDataSources() {
         // 尝试加载"default"数据源（向后兼容）
         try {
-            @SuppressWarnings("unchecked")
-            ConcurrentNavigableMap<Long, Object> defaultSource = (ConcurrentNavigableMap<Long, Object>) db.treeMap("default")
-                    .keySerializer(Serializer.LONG_PACKED)
-                    .valueSerializer(Serializer.JAVA)
-                    .createOrOpen();
+            ConcurrentNavigableMap<Long, Object> defaultSource = createDataSourceMap("default");
             if (!defaultSource.isEmpty()) {
                 dataSources.put("default", defaultSource);
             }
@@ -552,6 +543,20 @@ public class ObjectTimeSeriesDb {
             db.commit();
             System.out.println("清理了" + totalCleaned + "个30天前的历史数据点");
         }
+    }
+    
+    /**
+     * 创建数据源映射（处理类型转换）
+     * 
+     * @param sourceId 数据源ID
+     * @return 数据源映射
+     */
+    @SuppressWarnings("unchecked")
+    private ConcurrentNavigableMap<Long, Object> createDataSourceMap(String sourceId) {
+        return (ConcurrentNavigableMap<Long, Object>) db.treeMap(sourceId)
+                .keySerializer(Serializer.LONG)
+                .valueSerializer(Serializer.JAVA)
+                .createOrOpen();
     }
     
     /**
