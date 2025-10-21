@@ -117,8 +117,77 @@ public class TimeSeriesDatabase {
      * 初始化数据源
      */
     private void initializeDataSources() {
-        for (DataSourceConfig sourceConfig : dataSources.values()) {
-            createDataSource(sourceConfig);
+        // 如果数据源配置为空，尝试从现有数据库中恢复
+        if (dataSources.isEmpty()) {
+            recoverDataSourcesFromExistingDB();
+        } else {
+            // 创建新配置的数据源
+            for (DataSourceConfig sourceConfig : dataSources.values()) {
+                createDataSource(sourceConfig);
+            }
+        }
+    }
+    
+    /**
+     * 从现有数据库中恢复数据源配置
+     */
+    private void recoverDataSourcesFromExistingDB() {
+        try {
+            // 获取数据库中所有已存在的集合名称
+            Set<String> existingCollections = db.getAll().keySet();
+            
+            for (String collectionName : existingCollections) {
+                // 尝试推断数据类型
+                DataType dataType = inferDataTypeFromCollection(collectionName);
+                if (dataType != null) {
+                    // 创建数据源配置
+                    DataSourceConfig sourceConfig = new DataSourceConfig(collectionName, dataType, "从现有数据库恢复");
+                    dataSources.put(collectionName, sourceConfig);
+                    
+                    // 创建数据源
+                    createDataSource(sourceConfig);
+                    
+                    System.out.println("恢复数据源: " + collectionName + " (类型: " + dataType + ")");
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("从现有数据库恢复数据源时出错: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 从集合名称推断数据类型
+     * 
+     * @param collectionName 集合名称
+     * @return 推断的数据类型，如果无法推断返回null
+     */
+    private DataType inferDataTypeFromCollection(String collectionName) {
+        try {
+            // 尝试打开集合并检查第一个元素的数据类型
+            @SuppressWarnings("unchecked")
+            ConcurrentNavigableMap<Long, Object> map = (ConcurrentNavigableMap<Long, Object>) db.treeMap(collectionName).createOrOpen();
+            
+            if (map.isEmpty()) {
+                // 如果集合为空，默认为DOUBLE类型
+                return DataType.DOUBLE;
+            }
+            
+            // 获取第一个值来推断类型
+            Object firstValue = map.firstEntry().getValue();
+            if (firstValue instanceof Double) {
+                return DataType.DOUBLE;
+            } else if (firstValue instanceof Integer) {
+                return DataType.INTEGER;
+            } else if (firstValue instanceof Long) {
+                return DataType.LONG;
+            } else if (firstValue instanceof Float) {
+                return DataType.FLOAT;
+            } else {
+                return DataType.OBJECT;
+            }
+        } catch (Exception e) {
+            // 如果无法推断，默认为OBJECT类型
+            return DataType.OBJECT;
         }
     }
     

@@ -70,8 +70,10 @@ mvn clean install
 ### 1. 基本使用步骤
 
 #### 步骤1：创建数据库实例
+
+**方式1：创建新数据库**
 ```java
-// 使用Builder模式创建数据库
+// 使用Builder模式创建新数据库
 TimeSeriesDatabase db = TimeSeriesDatabaseBuilder.builder()
     .path("my_timeseries.db")           // 数据库文件路径
     .addDoubleSource("temperature")     // 添加温度数据源
@@ -80,6 +82,15 @@ TimeSeriesDatabase db = TimeSeriesDatabaseBuilder.builder()
     .withRetentionDays(30)              // 数据保留30天
     .enableMemoryMapping()              // 启用内存映射
     .buildWithDynamicSources();         // 支持动态添加数据源
+```
+
+**方式2：打开现有数据库**
+```java
+// 打开已存在的数据库（自动恢复数据源配置）
+TimeSeriesDatabase db = TimeSeriesDatabaseBuilder.openExisting("my_timeseries.db");
+
+// 打开现有数据库并支持动态添加数据源
+TimeSeriesDatabase db = TimeSeriesDatabaseBuilder.openExistingWithDynamicSources("my_timeseries.db");
 ```
 
 #### 步骤2：写入数据
@@ -279,7 +290,47 @@ Map<String, String> sourceInfo = db.getDataSourceInfo();
 System.out.println("数据源: " + sourceInfo.keySet());
 ```
 
-### 5. 注意事项
+### 5. 现有数据库支持
+
+MapTSDB支持打开已存在的数据库文件，自动恢复数据源配置：
+
+#### 自动数据源恢复
+```java
+// 打开现有数据库，自动恢复所有数据源
+TimeSeriesDatabase db = TimeSeriesDatabaseBuilder.openExisting("existing.db");
+
+// 获取恢复的数据源
+Set<String> dataSources = db.getDataSourceIds();
+System.out.println("恢复的数据源: " + dataSources);
+
+// 直接读取现有数据
+Double temp = db.getDouble("temperature", timestamp);
+Integer humidity = db.getInteger("humidity", timestamp);
+```
+
+#### 数据类型自动推断
+MapTSDB会自动推断现有数据源的数据类型：
+- 通过检查第一个数据点的类型来确定数据类型
+- 支持Double、Integer、Long、Float、Object类型
+- 如果集合为空，默认为DOUBLE类型
+
+#### 继续写入数据
+```java
+// 打开现有数据库
+TimeSeriesDatabase db = TimeSeriesDatabaseBuilder.openExisting("existing.db");
+
+// 继续写入新数据
+db.putDouble("temperature", System.currentTimeMillis(), 26.1);
+db.commit();
+
+// 动态添加新数据源（需要openExistingWithDynamicSources）
+TimeSeriesDatabase dynamicDb = TimeSeriesDatabaseBuilder.openExistingWithDynamicSources("existing.db");
+dynamicDb.addDoubleSource("pressure", "大气压力");
+dynamicDb.putDouble("pressure", timestamp, 1013.25);
+dynamicDb.commit();
+```
+
+### 6. 注意事项
 
 1. **事务管理**：单条写入后需要手动调用 `db.commit()`
 2. **批量写入**：推荐使用批量API，性能更好
@@ -287,6 +338,8 @@ System.out.println("数据源: " + sourceInfo.keySet());
 4. **数据清理**：设置合适的数据保留期，避免磁盘空间不足
 5. **并发安全**：MapDB本身是线程安全的，但建议合理控制并发级别
 6. **资源释放**：使用完毕后调用 `db.close()` 释放资源
+7. **现有数据库**：使用`openExisting()`会自动恢复数据源配置
+8. **动态添加**：需要动态添加数据源时使用`openExistingWithDynamicSources()`
 
 ### 基本使用
 

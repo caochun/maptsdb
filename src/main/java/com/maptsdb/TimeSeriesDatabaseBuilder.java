@@ -312,6 +312,42 @@ public class TimeSeriesDatabaseBuilder {
     }
     
     /**
+     * 打开现有数据库（自动恢复数据源配置）
+     * 
+     * @param dbPath 数据库文件路径
+     * @return 时序数据库实例
+     */
+    public static TimeSeriesDatabase openExisting(String dbPath) {
+        if (dbPath == null || dbPath.trim().isEmpty()) {
+            throw new IllegalArgumentException("数据库路径不能为空");
+        }
+        
+        DatabaseConfig config = new DatabaseConfig();
+        config.setDbPath(dbPath);
+        
+        // 使用空的数据源配置，让数据库自动恢复现有数据源
+        return new TimeSeriesDatabase(config, new HashMap<>());
+    }
+    
+    /**
+     * 打开现有数据库（自动恢复数据源配置，支持动态添加）
+     * 
+     * @param dbPath 数据库文件路径
+     * @return 时序数据库实例
+     */
+    public static TimeSeriesDatabase openExistingWithDynamicSources(String dbPath) {
+        if (dbPath == null || dbPath.trim().isEmpty()) {
+            throw new IllegalArgumentException("数据库路径不能为空");
+        }
+        
+        DatabaseConfig config = new DatabaseConfig();
+        config.setDbPath(dbPath);
+        
+        // 使用空的数据源配置，让数据库自动恢复现有数据源
+        return new TimeSeriesDatabase(config, new HashMap<>(), null);
+    }
+    
+    /**
      * 添加数据源到配置
      * 
      * @param sourceId 数据源ID
